@@ -16,9 +16,9 @@ from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 from pytorch_lightning import Trainer, seed_everything
 from torchvision.models.resnet import BasicBlock
 
-from torch_explainer.logic import explain_class
-from torch_explainer.nn import XLogic
-from torch_explainer.utils.pruning import l1_loss, prune_logic_layers
+from torch_explain.logic import explain_class
+from torch_explain.nn import XLogic
+from torch_explain.utils.pruning import l1_loss, prune_logic_layers
 
 
 class Explainer(pl.LightningModule):
