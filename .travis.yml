@@ -1,0 +1,38 @@
+dist: trusty
+sudo: false
+
+language: python
+
+cache:
+  directories:
+  - $HOME/.cache/pip
+
+matrix:
+  include:
+    - env: PYTHON_VERSION="3.7" NUMPY_VERSION="*" SCIPY_VERSION="*"
+           PANDAS_VERSION="*"
+
+install:
+  # install miniconda
+  - deactivate
+  - wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh
+  - MINICONDA_PATH=/home/travis/miniconda
+  - chmod +x miniconda.sh && ./miniconda.sh -b -p $MINICONDA_PATH
+  - export PATH=$MINICONDA_PATH/bin:$PATH
+  - conda update --yes conda
+  # create the testing environment
+  - conda create -n testenv --yes python=$PYTHON_VERSION pip
+  - source activate testenv
+  - conda install --yes numpy==$NUMPY_VERSION scipy==$SCIPY_VERSION pandas=$PANDAS_VERSION cython nose pytest pytest-cov
+  - pip install codecov
+  - pip install .
+
+#script:
+#  - mkdir for_test
+#  - cd for_test
+#  - pytest -v --cov=dbgen --pyargs dbgen
+script:
+  - coverage run -m unittest || python3 -m unittest || python -m unittest
+
+after_success:
+  - codecov
