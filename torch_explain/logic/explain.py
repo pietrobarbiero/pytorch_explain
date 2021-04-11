@@ -8,7 +8,7 @@ from sklearn.metrics import accuracy_score
 from sympy import simplify_logic
 
 from .base import replace_names, test_explanation
-from ..nn import XLogic  # , XLogicConv2d
+from ..nn import Logic  # , XLogicConv2d
 from ..utils.base import to_categorical
 
 
@@ -37,7 +37,7 @@ def explain_class(model: torch.nn.Module, x: torch.Tensor, y: torch.Tensor, bina
     is_first = True
     for layer_id, module in enumerate(model.children()):
         # analyze only logic layers
-        if isinstance(module, XLogic):  # or isinstance(module, XLogicConv2d):
+        if isinstance(module, Logic):  # or isinstance(module, XLogicConv2d):
 
             if is_first:
                 prev_module = module

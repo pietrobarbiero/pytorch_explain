@@ -40,12 +40,12 @@ class Conv2Concepts(Linear):
         )
 
 
-class XConceptizator(Module):
+class Conceptizator(Module):
     """Applies a non-linearity to the incoming data: :math:`y = a(x)`
     """
 
     def __init__(self, activation: str = 'sigmoid') -> None:
-        super(XConceptizator, self).__init__()
+        super(Conceptizator, self).__init__()
         self.concepts = None
         self.activation_name = activation
         self.activation = torch.sigmoid

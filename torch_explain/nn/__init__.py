@@ -1,8 +1,8 @@
-from .logic import XLogic, DisentangledConcepts
+from .logic import Logic, DisentangledConcepts
 from .concepts import Conv2Concepts
 
 __all__ = [
-    'XLogic',
+    'Logic',
     'DisentangledConcepts',
     'Conv2Concepts',
 ]

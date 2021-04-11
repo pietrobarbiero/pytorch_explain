@@ -3,23 +3,21 @@ from torch import Tensor
 from torch.nn import Linear
 from torch.nn.utils import prune
 
-from .concepts import XConceptizator
+from .concepts import Conceptizator
 
 
-class XLogic(Linear):
+class Logic(Linear):
     """Applies a linear transformation to the incoming data: :math:`y = xA^T + b`
     """
 
     def __init__(self, in_features: int, out_features: int, activation: str,
                  bias: bool = True, top: bool = False) -> None:
-        super(XLogic, self).__init__(in_features, out_features, bias)
+        super(Logic, self).__init__(in_features, out_features, bias)
         self.in_features = in_features
         self.out_features = out_features
         self.top = top
-        self.conceptizator = XConceptizator(activation)
+        self.conceptizator = Conceptizator(activation)
         self.activation = activation
-        self.weight_orig = self.weight
-        self.weight_mask = None
 
     def forward(self, input: Tensor) -> Tensor:
         x = self.conceptizator(input)

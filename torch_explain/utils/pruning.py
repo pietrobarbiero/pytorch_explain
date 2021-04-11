@@ -1,5 +1,5 @@
 import torch
-from ..nn import XLogic, Conv2Concepts
+from ..nn import Logic, Conv2Concepts
 
 
 def prune_logic_layers(model: torch.nn.Module, current_epoch: int, prune_epoch: int,
@@ -18,10 +18,10 @@ def prune_logic_layers(model: torch.nn.Module, current_epoch: int, prune_epoch: 
     model.eval()
     for i, module in enumerate(model.children()):
         # prune only Linear layers
-        if isinstance(module, XLogic):
+        if isinstance(module, Logic):
             if not module.top:
                 if hasattr(module, 'weight_orig'):
-                    break
+                    pass
                 _prune(module, fan_in, device=device)
 
         if isinstance(module, Conv2Concepts):
@@ -58,7 +58,7 @@ def _prune(module: torch.nn.Module, fan_in: int, device: torch.device = torch.de
 def l1_loss(model: torch.nn.Module):
     loss = 0
     for module in model.children():
-        if isinstance(module, XLogic):
+        if isinstance(module, Logic):
             loss += torch.norm(module.weight, 1) + torch.norm(module.bias, 1)
             break
     return loss
@@ -68,7 +68,7 @@ def whitening_loss(model: torch.nn.Module, device: torch.device = torch.device('
     loss = 0
     cov = None
     for module in model.children():
-        if isinstance(module, XLogic):
+        if isinstance(module, Logic):
             # the target covariance matrix is diagonal
             n_concepts = module.conceptizator.concepts.shape[1]
             cov_objective = torch.eye(n_concepts).to(device)
