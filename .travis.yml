@@ -24,7 +24,7 @@ install:
   - source activate testenv
   - conda install --yes sympy pandas scikit-learn tqdm cython nose pytest pytest-cov
   - conda install --yes pytorch torchvision torchaudio cpuonly -c pytorch
-  - pip install --yes pytorch-lightning
+  - conda install --yes pytorch-lightning
   - pip install codecov
   - pip install .
 
