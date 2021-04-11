@@ -7,19 +7,19 @@ import os
 from setuptools import find_packages, setup
 
 # get __version__ from _version.py
-ver_file = os.path.join('template', '_version.py')
+ver_file = os.path.join('torch_explain', '_version.py')
 with open(ver_file) as f:
     exec(f.read())
 
-DISTNAME = 'project-template'
-DESCRIPTION = 'A template.'
+DISTNAME = 'Pytorch Explain'
+DESCRIPTION = 'Pytorch Explain.'
 with codecs.open('README.rst', encoding='utf-8-sig') as f:
     LONG_DESCRIPTION = f.read()
 MAINTAINER = 'P. Barbiero'
 MAINTAINER_EMAIL = 'barbiero@tutanota.com'
-URL = 'https://github.com/pietrobarbiero/project-template'
+URL = 'https://github.com/pietrobarbiero/pytorch_explain'
 LICENSE = 'Apache 2.0'
-DOWNLOAD_URL = 'https://github.com/pietrobarbiero/project-template'
+DOWNLOAD_URL = 'https://github.com/pietrobarbiero/pytorch_explain'
 VERSION = __version__
 INSTALL_REQUIRES = ['numpy', 'scipy', 'scikit-learn', 'pandas']
 CLASSIFIERS = ['Intended Audience :: Science/Research',

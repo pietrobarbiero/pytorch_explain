@@ -79,7 +79,7 @@ class TestTemplateObject(unittest.TestCase):
 
         # training
         checkpoint_callback = ModelCheckpoint(dirpath=base_dir, monitor='val_loss', save_top_k=1)
-        trainer = Trainer(max_epochs=5, gpus=1, auto_lr_find=True, deterministic=False,
+        trainer = Trainer(max_epochs=1, gpus=1, auto_lr_find=True, deterministic=False,
                           check_val_every_n_epoch=1, default_root_dir=base_dir,
                           weights_save_path=base_dir, profiler="simple",
                           callbacks=[EarlyStopping(monitor='val_loss'), checkpoint_callback])

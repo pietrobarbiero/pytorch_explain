@@ -9,8 +9,7 @@ cache:
 
 matrix:
   include:
-    - env: PYTHON_VERSION="3.7" NUMPY_VERSION="*" SCIPY_VERSION="*"
-           PANDAS_VERSION="*"
+    - env: PYTHON_VERSION="3.7" NUMPY_VERSION="*" SCIPY_VERSION="*" PANDAS_VERSION="*" PYTORCH_VERSION="*" SYMPY_VERSION="*"
 
 install:
   # install miniconda
@@ -23,7 +22,9 @@ install:
   # create the testing environment
   - conda create -n testenv --yes python=$PYTHON_VERSION pip
   - source activate testenv
-  - conda install --yes numpy==$NUMPY_VERSION scipy==$SCIPY_VERSION pandas=$PANDAS_VERSION cython nose pytest pytest-cov
+  - conda install --yes sympy pandas scikit-learn tqdm cython nose pytest pytest-cov
+  - conda install --yes pytorch torchvision torchaudio cpuonly -c pytorch
+  - pip install --yes pytorch-lightning
   - pip install codecov
   - pip install .
 
