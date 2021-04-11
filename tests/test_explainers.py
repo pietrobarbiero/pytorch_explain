@@ -1,32 +1,26 @@
-import glob
 import os
 import unittest
 
 import torch
 from pytorch_lightning.callbacks import ModelCheckpoint
-from torchvision import transforms
 from torch.utils.data import DataLoader
-from torch.utils.data import random_split
 from pytorch_lightning import Trainer, seed_everything
 
-from torch_explain.models.explainer import MNIST_C_to_Y, MuExplainer
+from torch_explain.models.explainer import MuExplainer
 
 
 class TestTemplateObject(unittest.TestCase):
     def test_mu_classifier(self):
         seed_everything(42)
         # data
-        size = 224
-        resize = int(size * 0.9)
-        mnist_transforms = transforms.Compose([
-            transforms.Resize(size=resize),
-            transforms.CenterCrop(size=size),
-            transforms.ToTensor(),
-            transforms.Normalize((0.5,), (0.5,)),
-        ])
-        dataset = MNIST_C_to_Y('../experiments/data', train=True, download=True, transform=mnist_transforms)
-        train_data, val_data, test_data = random_split(dataset, [50000, 5000, 5000])
-        train_loader = DataLoader(train_data, batch_size=180)
+        # train_data = torch.load('../experiments/data/MNIST_X_to_C/c2y_training.pt')
+        val_data = torch.load('../experiments/data/MNIST_X_to_C/c2y_validation.pt')
+        test_data = torch.load('../experiments/data/MNIST_X_to_C/c2y_test.pt')
+        val_data.tensors = ((val_data.tensors[0]>0.5).to(torch.float),
+                            (val_data.tensors[1].argmax(dim=1) % 2 == 1).to(torch.long))
+        test_data.tensors = ((test_data.tensors[0]>0.5).to(torch.float),
+                             (test_data.tensors[1].argmax(dim=1) % 2 == 1).to(torch.long))
+        # train_loader = DataLoader(train_data, batch_size=180)
         val_loader = DataLoader(val_data, batch_size=180)
         test_loader = DataLoader(test_data, batch_size=180)
 
@@ -41,9 +35,8 @@ class TestTemplateObject(unittest.TestCase):
                           weights_save_path=base_dir, profiler="simple",
                           callbacks=[checkpoint_callback])
 
-        path = glob.glob(f'{base_dir}/*.ckpt')
-        model = MuExplainer(n_concepts=10, n_classes=2, concept_activation='identity', l1=0.01, prune_epoch=10,
-                            fan_in=5)
+        model = MuExplainer(n_concepts=10, n_classes=2, concept_activation='identity',
+                            l1=0.03, prune_epoch=10, fan_in=5)
         trainer.fit(model, val_loader, val_loader)
 
         model.freeze()

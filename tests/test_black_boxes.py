@@ -51,6 +51,8 @@ class TestTemplateObject(unittest.TestCase):
         trainer.test(model, test_dataloaders=test_loader)
 
         data_dir = '../experiments/data/MNIST_X_to_C'
+        # dataset = model.transform(train_loader, base_dir=data_dir, extension='training')
+        dataset = model.transform(val_loader, base_dir=data_dir, extension='validation')
         dataset = model.transform(test_loader, base_dir=data_dir, extension='test')
 
 
