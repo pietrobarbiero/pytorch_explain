@@ -64,7 +64,7 @@ def test_explanation(explanation: str, target_class: int, x: torch.Tensor, y: to
     y = to_categorical(y).eq(target_class).cpu().detach().numpy()
 
     accuracy = metric(y, predictions)
-    return accuracy, torch.stack(local_predictions, dim=0).sum(dim=0) > 0 if give_local else predictions
+    return accuracy, predictions
 
 
 def predict_minterm(list_of_terms, x):

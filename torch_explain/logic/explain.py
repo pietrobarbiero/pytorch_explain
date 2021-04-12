@@ -12,8 +12,8 @@ from ..nn import Logic  # , XLogicConv2d
 from ..utils.base import to_categorical
 
 
-def explain_class(model: torch.nn.Module, x: torch.Tensor, y: torch.Tensor, binary: bool,
-                  target_class: int, simplify: bool = True, topk_explanations: int = 3,
+def explain_class(model: torch.nn.Module, x: torch.Tensor, y: torch.Tensor,
+                  target_class: int, topk_explanations: int = 3, max_accuracy: bool = False,
                   concept_names: List = None) -> str:
     """
     Generate a local explanation for a single sample.
@@ -21,16 +21,14 @@ def explain_class(model: torch.nn.Module, x: torch.Tensor, y: torch.Tensor, bina
     :param model: pytorch model
     :param x: input samples
     :param y: target labels
-    :param x_sample: input for which the explanation is required
     :param target_class: class ID
-    :param method: local feature importance method
-    :param simplify: simplify local explanation
+    :param topk_explanations: number of local explanations to be combined
     :param concept_names: list containing the names of the input concepts
-    :param device: cpu or cuda device
-    :param num_classes: override the number of classes
     :return: Local explanation
     """
-    x_validation, y_validation, model = _get_validation_data(x, y, model, target_class, binary)
+    x_validation, y_validation = _get_validation_data(x, y, model, target_class)
+    if x_validation is None:
+        return None, None
 
     class_explanation = ''
     class_explanations = {}
@@ -48,30 +46,25 @@ def explain_class(model: torch.nn.Module, x: torch.Tensor, y: torch.Tensor, bina
             else:
                 explanations = []
                 for neuron in range(module.conceptizator.concepts.size(1)):
-                    if module.top and not binary and neuron != target_class:
+                    if module.top and neuron != target_class:
                         continue
 
                     local_explanations = []
                     local_explanations_raw = {}
 
-                    neuron_concepts = module.conceptizator.concepts[:, neuron] > module.conceptizator.threshold
-                    if module.top and binary:
-                        neuron_concepts = neuron_concepts.eq(target_class)
-                    elif module.top and not binary:
-                        neuron_concepts = module.conceptizator.concepts.argmax(dim=1).eq(target_class)
-                    neuron_list = torch.nonzero(neuron_concepts)
+                    if module.top:
+                        y_target = module.conceptizator.concepts.argmax(dim=1).eq(target_class)
+                    else:
+                        y_target = module.conceptizator.concepts[:, neuron] > module.conceptizator.threshold
 
+                    neuron_list = torch.nonzero(y_target)
                     for i in neuron_list:
-                        if module.top:
-                            simplify = True
-                            y_target = y_validation.eq(target_class)
-                        else:
-                            simplify = False
-                            y_target = neuron_concepts
+                        simplify = True if module.top else False
                         local_explanation, local_explanation_raw = _local_explanation(prev_module, feature_names, i,
                                                                                       local_explanations_raw,
                                                                                       c_validation, y_target,
-                                                                                      target_class, simplify)
+                                                                                      target_class, simplify,
+                                                                                      max_accuracy)
 
                         if local_explanation and local_explanation_raw:
                             local_explanations_raw[local_explanation_raw] = local_explanation_raw
@@ -89,13 +82,12 @@ def explain_class(model: torch.nn.Module, x: torch.Tensor, y: torch.Tensor, bina
                     aggregated_explanation = ''
                 class_explanation = str(aggregated_explanation)
 
-    class_explanation, class_explanations = _replace_names_dict(class_explanation, class_explanations,
-                                                                concept_names)
+    class_explanation, class_explanations = _replace_names_dict(class_explanation, class_explanations, concept_names)
 
     return class_explanation[1:-1], class_explanations
 
 
-def _simplify_formula(explanation: str, x: torch.Tensor, y: torch.Tensor, target_class: int) -> str:
+def _simplify_formula(explanation: str, x: torch.Tensor, y: torch.Tensor, target_class: int, max_accuracy: bool) -> str:
     """
     Simplify formula to a simpler one that is still coherent.
 
@@ -103,6 +95,7 @@ def _simplify_formula(explanation: str, x: torch.Tensor, y: torch.Tensor, target
     :param x: input data.
     :param y: target labels (1D, categorical NOT one-hot encoded).
     :param target_class: target class
+    :param max_accuracy: drop  term only if it gets max accuracy
     :return: Simplified formula
     """
 
@@ -117,7 +110,7 @@ def _simplify_formula(explanation: str, x: torch.Tensor, y: torch.Tensor, target
 
         if explanation_simplified:
             accuracy, preds = test_explanation(explanation_simplified, target_class, x, y, metric=accuracy_score)
-            if accuracy == 1.:
+            if (max_accuracy and accuracy == 1.) or (not max_accuracy and accuracy >= base_accuracy):
                 explanation = copy.deepcopy(explanation_simplified)
 
     return explanation
@@ -148,7 +141,7 @@ def _aggregate_explanations(local_explanations, topk_explanations):
 
 
 def _local_explanation(prev_module, feature_names, neuron_id, neuron_explanations_raw,
-                       c_validation, y_target, target_class, simplify):
+                       c_validation, y_target, target_class, simplify, max_accuracy):
     # explanation is the conjunction of non-pruned features
     explanation_raw = ''
     for j in torch.nonzero(prev_module.weight.sum(axis=0)):
@@ -160,8 +153,6 @@ def _local_explanation(prev_module, feature_names, neuron_id, neuron_explanation
             else:
                 explanation_raw += f'~{feature_names[j[0]]}'
 
-    if explanation_raw:
-        explanation_raw = simplify_logic(explanation_raw, 'dnf', force=True)
     explanation_raw = str(explanation_raw)
     if explanation_raw in ['', 'False', 'True', '(False)', '(True)']:
         return None, None
@@ -170,7 +161,7 @@ def _local_explanation(prev_module, feature_names, neuron_id, neuron_explanation
         explanation = neuron_explanations_raw[explanation_raw]
     elif simplify:
         # accuracy, _ = test_explanation(explanation_raw, target_class, c_validation, y_target, metric=accuracy_score)
-        explanation = _simplify_formula(explanation_raw, c_validation, y_target, target_class)
+        explanation = _simplify_formula(explanation_raw, c_validation, y_target, target_class, max_accuracy)
         # accuracy2, _ = test_explanation(explanation, target_class, c_validation, y_target, metric=accuracy_score)
         # print(f'{accuracy:.2f} VS {accuracy2:.2f}')
     else:
@@ -190,47 +181,34 @@ def _replace_names_dict(class_explanation, class_explanations, concept_names):
     return class_explanation, class_explanations
 
 
-def _get_validation_data(x, y, model, target_class, binary=True):
-    y = to_categorical(y)
-    assert (y == target_class).any(), "Cannot get explanation if target class is not amongst target labels"
-
-    # # collapse samples having the same boolean values and class label different from the target class
-    # w, b = collect_parameters(model, device)
-    # feature_weights = w[0]
-    # feature_used_bool = np.sum(np.abs(feature_weights), axis=0) > 0
-    # feature_used = np.sort(np.nonzero(feature_used_bool)[0])
-    # _, idx = np.unique((x[:, feature_used][y == target_class] >= 0.5).cpu().detach().numpy(), axis=0, return_index=True)
-    threshold = 0.5
-    _, idx = np.unique((x[y == target_class] >= threshold).cpu().detach().numpy(), axis=0, return_index=True)
-    x_target = x[y == target_class][idx]
-    y_target = y[y == target_class][idx]
-    # x_target = x[y == target_class]
-    # y_target = y[y == target_class]
-    # print(len(y_target))
+def _get_validation_data(x, y, model, target_class):
+    threshold = model[0].conceptizator.threshold
+    _, idx = np.unique((x[y.argmax(dim=1) == target_class] >= threshold).cpu().detach().numpy(), axis=0, return_index=True)
+    x_target = x[y.argmax(dim=1) == target_class][idx]
+    y_target = y[y.argmax(dim=1) == target_class][idx]
 
     # get model's predictions
     preds = model(x_target)
-    if binary:
-        preds = preds.unsqueeze(-1)
-    preds = to_categorical(preds)
 
     # identify samples correctly classified of the target class
-    correct_mask = y_target.eq(preds)
+    correct_mask = y_target.argmax(dim=1).eq(preds.argmax(dim=1))
+    if sum(correct_mask) < 2:
+        return None, None
+
     x_target_correct = x_target[correct_mask]
     y_target_correct = y_target[correct_mask]
 
     # collapse samples having the same boolean values and class label different from the target class
-    _, idx = np.unique((x[y != target_class] > threshold).cpu().detach().numpy(), axis=0, return_index=True)
-    x_reduced_opposite = x[y != target_class][idx]
-    y_reduced_opposite = y[y != target_class][idx]
+    _, idx = np.unique((x[y.argmax(dim=1) != target_class] > threshold).cpu().detach().numpy(), axis=0, return_index=True)
+    x_reduced_opposite = x[y.argmax(dim=1) != target_class][idx]
+    y_reduced_opposite = y[y.argmax(dim=1) != target_class][idx]
     preds_opposite = model(x_reduced_opposite)
-    if len(preds_opposite.squeeze(-1).shape) > 1:
-        preds_opposite = torch.argmax(preds_opposite, dim=1)
-    else:
-        preds_opposite = (preds_opposite > 0.5).squeeze()
 
     # identify samples correctly classified of the opposite class
-    correct_mask = y_reduced_opposite.eq(preds_opposite)
+    correct_mask = y_reduced_opposite.argmax(dim=1).eq(preds_opposite.argmax(dim=1))
+    if sum(correct_mask) < 2:
+        return None, None
+
     x_reduced_opposite_correct = x_reduced_opposite[correct_mask]
     y_reduced_opposite_correct = y_reduced_opposite[correct_mask]
 
@@ -238,6 +216,6 @@ def _get_validation_data(x, y, model, target_class, binary=True):
     x_validation = torch.cat([x_reduced_opposite_correct, x_target_correct], dim=0)
     y_validation = torch.cat([y_reduced_opposite_correct, y_target_correct], dim=0)
 
-    model.train()
+    model.eval()
     model(x_validation)
-    return x_validation, y_validation, model
+    return x_validation, y_validation
