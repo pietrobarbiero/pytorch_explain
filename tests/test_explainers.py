@@ -3,9 +3,11 @@ import unittest
 
 import torch
 from pytorch_lightning.callbacks import ModelCheckpoint
+from sklearn.metrics import accuracy_score
 from torch.utils.data import DataLoader
 from pytorch_lightning import Trainer, seed_everything
 
+from torch_explain.logic import test_explanation, complexity
 from torch_explain.models.explainer import MuExplainer
 
 
@@ -35,7 +37,7 @@ class TestTemplateObject(unittest.TestCase):
                           weights_save_path=base_dir, profiler="simple",
                           callbacks=[checkpoint_callback])
 
-        model = MuExplainer(n_concepts=10, n_classes=2, concept_activation='identity',
+        model = MuExplainer(n_concepts=10, n_classes=2, concept_activation='identity_bool',
                             l1=0.03, prune_epoch=10, fan_in=5)
         trainer.fit(model, val_loader, val_loader)
 
@@ -49,8 +51,14 @@ class TestTemplateObject(unittest.TestCase):
         y2[:, 0] = y.cpu() % 2 == 0
         y2[:, 1] = y.cpu() % 2 == 1
         class_explanation, _ = model.explain_class(x, y, target_class=1, topk_explanations=10)
-
+        test_explanation(class_explanation, target_class=1, x=x, y=y, concept_names=None)
+        accuracy, y_formula = test_explanation(class_explanation, target_class=1, x=x, y=y)
+        explanation_fidelity = accuracy_score(y_preds, y_formula)
+        explanation_complexity = complexity(class_explanation)
         print(class_explanation)
+        print(accuracy)
+        print(explanation_fidelity)
+        print(explanation_complexity)
 
 
 if __name__ == '__main__':
