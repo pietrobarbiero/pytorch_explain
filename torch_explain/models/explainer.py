@@ -1,13 +1,16 @@
 from abc import abstractmethod
 
 import torch
+from sklearn.metrics import accuracy_score
 from torch import nn
 import torch.nn.functional as F
+from torch.nn import Dropout
 from torch.nn.modules.loss import _Loss
 from torch.optim import AdamW
+from torch.utils.data import DataLoader
 from torchvision.datasets import MNIST
 
-from torch_explain.logic import explain_class
+from torch_explain.logic import explain_class, test_explanation, complexity
 from torch_explain.models.base import task_accuracy, BaseClassifier
 from torch_explain.nn import Logic
 from torch_explain.utils.pruning import l1_loss, prune_logic_layers
@@ -65,7 +68,7 @@ class BaseExplainer(BaseClassifier):
             return AdamW(self.model.parameters(), lr=self.lr)
 
     @abstractmethod
-    def explain_class(self, x, y, target_class, topk_explanations=3):
+    def explain_class(self, x, y, target_class, topk_explanations=3, **kwargs):
         pass
 
 
@@ -81,8 +84,9 @@ class MuExplainer(BaseExplainer):
         if len(explainer_hidden) > 0:
             self.model_layers.append(Logic(n_concepts, explainer_hidden[0], activation=concept_activation))
             self.model_layers.append(nn.LeakyReLU())
-            for i in range(len(explainer_hidden)):
-                in_features = n_concepts if i == 0 else explainer_hidden[-1]
+            for i in range(1, len(explainer_hidden)):
+                in_features = explainer_hidden[i - 1]
+                self.model_layers.append(Dropout())
                 self.model_layers.append(nn.Linear(in_features, explainer_hidden[i]))
                 self.model_layers.append(nn.LeakyReLU())
 
@@ -99,9 +103,44 @@ class MuExplainer(BaseExplainer):
 
         self.save_hyperparameters()
 
-    def explain_class(self, x, y, target_class, topk_explanations=3):
-        return explain_class(self.model.cpu(), x, y, binary=False,
-                             target_class=target_class, topk_explanations=topk_explanations)
+    def transform(self, dataloader: DataLoader, x_to_bool: bool = True):
+        x_list, y_out_list, y_list = [], [], []
+        for i_batch, (x, y) in enumerate(dataloader):
+            y_out = self.model(x.to(self.device))
+            x_list.append(x.cpu())
+            y_out_list.append(y_out.cpu())
+            y_list.append(y.cpu())
+        x, y_out, y = torch.cat(x_list), torch.cat(y_out_list), torch.cat(y_list)
+
+        if x_to_bool:
+            x = (x.cpu() > 0.5).to(torch.float)
+        y1h = F.one_hot(y)
+        return x, y_out, y1h
+
+    def explain_class(self, val_dataloaders: DataLoader, test_dataloaders: DataLoader,
+                      target_class, concept_names=None, topk_explanations=3,
+                      max_accuracy: bool = False, x_to_bool: bool = True, y_to_one_hot: bool = True):
+
+        x_val, y_val_out, y_val_1h = self.transform(val_dataloaders)
+        x_test, y_test_out, y_test_1h = self.transform(test_dataloaders)
+
+        class_explanation, explanations = explain_class(self.model.cpu(), x_val, y_val_1h,
+                                                        target_class=target_class,
+                                                        topk_explanations=topk_explanations,
+                                                        concept_names=concept_names,
+                                                        max_accuracy=max_accuracy)
+        accuracy, y_formula = test_explanation(class_explanation, target_class=1, x=x_test, y=y_test_1h,
+                                               concept_names=concept_names)
+        explanation_fidelity = accuracy_score(y_test_1h.argmax(dim=1), y_formula)
+        explanation_complexity = complexity(class_explanation)
+        results = {
+            'target_class': target_class,
+            'explanation': class_explanation,
+            'explanation_accuracy': accuracy,
+            'explanation_fidelity': explanation_fidelity,
+            'explanation_complexity': explanation_complexity,
+        }
+        return results
 
 
 class MNIST_C_to_Y(MNIST):

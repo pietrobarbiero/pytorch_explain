@@ -52,15 +52,17 @@ class BaseClassifier(pl.LightningModule):
             return AdamW(self.model.parameters(), lr=self.lr)
 
     def transform(self, dataloader: DataLoader, base_dir: str, extension: str):
-        c_list, y_list = [], []
+        y_out_list, y_list = [], []
         for i_batch, (x, y) in enumerate(dataloader):
-            c_out = self.model(x.to(self.device))
-            c_list.append(c_out.cpu())
+            y_out = self.model(x.to(self.device))
+            y_out_list.append(y_out.cpu())
             y_list.append(y.cpu())
-        dataset = TensorDataset(torch.cat(c_list), torch.cat(y_list))
+        y_out, y = torch.cat(y_out_list), torch.cat(y_list)
         if base_dir:
+            dataset = TensorDataset(y_out, y)
             torch.save(dataset, f'{base_dir}/c2y_{extension}.pt')
-        return dataset
+            return dataset
+        return y_out, y
 
 
 def concept_accuracy(y_out, y):
