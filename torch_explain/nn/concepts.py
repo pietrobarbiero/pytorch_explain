@@ -14,7 +14,7 @@ class Conv2Concepts(Linear):
         self.channel_size = channel_size
         self.activation = activation
         self.top = False
-        self.conceptizator = XConceptizator(activation)
+        self.conceptizator = Conceptizator(activation)
         self._prune()
 
     def forward(self, input: Tensor) -> Tensor:
@@ -68,6 +68,9 @@ class Conceptizator(Module):
     def forward(self, input: Tensor) -> Tensor:
         self.concepts = self.activation(input)
         return self.concepts
+
+    def extra_repr(self) -> str:
+        return 'activation={}, threshold={}'.format(self.activation_name, self.threshold)
 
 
 def identity(x):

@@ -1,5 +1,6 @@
 import torch
-from ..nn import Logic, Conv2Concepts
+
+from torch_explain.nn import Logic, Conv2Concepts
 
 
 def prune_logic_layers(model: torch.nn.Module, current_epoch: int, prune_epoch: int,
@@ -53,27 +54,3 @@ def _prune(module: torch.nn.Module, fan_in: int, device: torch.device = torch.de
     # prune
     torch.nn.utils.prune.custom_from_mask(module, name="weight", mask=mask.to(device))
     return
-
-
-def l1_loss(model: torch.nn.Module):
-    loss = 0
-    for module in model.children():
-        if isinstance(module, Logic):
-            loss += torch.norm(module.weight, 1) + torch.norm(module.bias, 1)
-            break
-    return loss
-
-
-def whitening_loss(model: torch.nn.Module, device: torch.device = torch.device('cpu')):
-    loss = 0
-    cov = None
-    for module in model.children():
-        if isinstance(module, Logic):
-            # the target covariance matrix is diagonal
-            n_concepts = module.conceptizator.concepts.shape[1]
-            cov_objective = torch.eye(n_concepts).to(device)
-            # compute covariance matrix of activations
-            cov = 1 / (n_concepts - 1) * torch.matmul(module.conceptizator.concepts.T, module.conceptizator.concepts)
-            loss += torch.norm(cov - cov_objective, p=2)
-            break
-    return loss, cov

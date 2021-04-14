@@ -18,9 +18,13 @@ class TestTemplateObject(unittest.TestCase):
         # train_data = torch.load('../experiments/data/MNIST_X_to_C/c2y_training.pt')
         val_data = torch.load('../experiments/data/MNIST_X_to_C/c2y_validation.pt')
         test_data = torch.load('../experiments/data/MNIST_X_to_C/c2y_test.pt')
-        val_data.tensors = ((val_data.tensors[0]>0.5).to(torch.float),
+        # val_data.tensors = ((val_data.tensors[1]>0.5).to(torch.float),
+        #                     (val_data.tensors[1].argmax(dim=1) % 2 == 1).to(torch.long))
+        # test_data.tensors = ((test_data.tensors[1]>0.5).to(torch.float),
+        #                      (test_data.tensors[1].argmax(dim=1) % 2 == 1).to(torch.long))
+        val_data.tensors = (torch.cat((val_data.tensors[1], torch.zeros((val_data.tensors[1].shape[0], 2))), 1),
                             (val_data.tensors[1].argmax(dim=1) % 2 == 1).to(torch.long))
-        test_data.tensors = ((test_data.tensors[0]>0.5).to(torch.float),
+        test_data.tensors = (torch.cat((test_data.tensors[1], torch.zeros((test_data.tensors[1].shape[0], 2))), 1),
                              (test_data.tensors[1].argmax(dim=1) % 2 == 1).to(torch.long))
         # train_loader = DataLoader(train_data, batch_size=180)
         val_loader = DataLoader(val_data, batch_size=180)
@@ -32,33 +36,19 @@ class TestTemplateObject(unittest.TestCase):
 
         # training
         checkpoint_callback = ModelCheckpoint(dirpath=base_dir, monitor='val_loss', save_top_k=1)
-        trainer = Trainer(min_epochs=20, max_epochs=20, gpus=1, auto_lr_find=True, deterministic=False,
+        trainer = Trainer(max_epochs=10, gpus=1, auto_lr_find=True, deterministic=False,
                           check_val_every_n_epoch=1, default_root_dir=base_dir,
                           weights_save_path=base_dir, profiler="simple",
                           callbacks=[checkpoint_callback])
 
-        model = MuExplainer(n_concepts=10, n_classes=2, concept_activation='identity_bool',
-                            l1=0.03, prune_epoch=10, fan_in=5)
+        model = MuExplainer(n_concepts=12, n_classes=2, concept_activation='identity_bool', l1=0.001, lr=0.01)
         trainer.fit(model, val_loader, val_loader)
 
         model.freeze()
         trainer.test(model, test_dataloaders=test_loader)
-
-        x, y = next(iter(test_loader))
-
-        (x.cpu() > 0.5).to(torch.float)
-        y2 = torch.zeros((y.shape[0], 2))
-        y2[:, 0] = y.cpu() % 2 == 0
-        y2[:, 1] = y.cpu() % 2 == 1
-        class_explanation, _ = model.explain_class(x, y, target_class=1, topk_explanations=10)
-        test_explanation(class_explanation, target_class=1, x=x, y=y, concept_names=None)
-        accuracy, y_formula = test_explanation(class_explanation, target_class=1, x=x, y=y)
-        explanation_fidelity = accuracy_score(y_preds, y_formula)
-        explanation_complexity = complexity(class_explanation)
-        print(class_explanation)
-        print(accuracy)
-        print(explanation_fidelity)
-        print(explanation_complexity)
+        results = model.explain_class(val_loader, test_loader, target_class=1,
+                                      topk_explanations=10, max_minterm_complexity=5)
+        print(results)
 
 
 if __name__ == '__main__':

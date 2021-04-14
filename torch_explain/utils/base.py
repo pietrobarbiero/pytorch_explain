@@ -1,66 +1,7 @@
-from typing import List, Tuple
+from typing import List
 
-import numpy as np
-import torch
 from sklearn.tree import _tree, DecisionTreeClassifier
 from sympy import simplify_logic
-
-
-def to_categorical(y: torch.Tensor) -> torch.Tensor:
-    """
-    Transform input tensor to categorical.
-
-    :param y: input tensor.
-    :return: Categorical tensor
-    """
-    if y.min() < 0:
-        y = torch.nn.Sigmoid()(y)
-    if len(y.shape) == 2 and y.shape[1] > 1:
-        # one hot encoding to categorical
-        yc = torch.argmax(y, dim=1)
-    elif y.long().sum() == y.sum():
-        # already argmax passed
-        yc = y
-    elif torch.max(y) > 1 or torch.min(y) < 0:
-        # logits tensor
-        yc = y.squeeze() > 0
-    else:
-        # binary/probabilities to categorical
-        yc = y.squeeze() > 0.5
-
-    if len(yc.size()) == 0:
-        yc = yc.unsqueeze(0)
-
-    return yc
-
-
-def collect_parameters(model: torch.nn.Module,
-                       device: torch.device = torch.device('cpu')) -> Tuple[List[np.ndarray], List[np.ndarray]]:
-    """
-    Collect network parameters in two lists of numpy arrays.
-
-    :param model: pytorch model
-    :param device: cpu or cuda device
-    :return: list of weights and list of biases
-    """
-    weights, bias = [], []
-    for module in model.children():
-        if isinstance(module, torch.nn.Linear):
-            if device.type == 'cpu':
-                weights.append(module.weight.detach().numpy())
-                try:
-                    bias.append(module.bias.detach().numpy())
-                except:
-                    pass
-
-            else:
-                weights.append(module.weight.cpu().detach().numpy())
-                try:
-                    bias.append(module.bias.cpu().detach().numpy())
-                except:
-                    pass
-
-    return weights, bias
 
 
 def tree_to_formula(tree: DecisionTreeClassifier, concept_names: List[str], target_class: int) -> str:

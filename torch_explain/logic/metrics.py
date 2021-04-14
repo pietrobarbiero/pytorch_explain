@@ -1,33 +1,15 @@
 from typing import List
 
 import sympy
-import torch
 import numpy as np
-from sklearn.metrics import accuracy_score
-
-from torch_explain.logic import test_explanation
-
-
-def predictions(explanation: str, target_class: int, x: torch.Tensor, y: torch.Tensor,
-                give_local: bool = False, metric: callable = accuracy_score,
-                concept_names: list = None) -> np.ndarray:
-    return test_explanation(explanation, target_class, x, y, give_local, metric, concept_names)[1]
-
-
-def fidelity(y_formula: torch.Tensor, y_pred: torch.Tensor, metric: callable = accuracy_score) -> float:
-    return metric(y_formula, y_pred)
-
-
-def accuracy_score(y_formula: torch.Tensor, y_true: torch.Tensor, metric: callable = accuracy_score) -> float:
-    return metric(y_formula, y_true)
 
 
 def complexity(formula: str, to_dnf=False) -> float:
-    if formula != "":
+    if formula != "" and formula is not None:
         if to_dnf:
             formula = str(sympy.to_dnf(formula))
         return np.array([len(f.split(' & ')) for f in formula.split(' | ')]).sum()
-    return 1
+    return 0
 
 
 def concept_consistency(formula_list: List[str]) -> dict:

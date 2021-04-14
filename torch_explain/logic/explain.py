@@ -7,14 +7,14 @@ import numpy as np
 from sklearn.metrics import accuracy_score
 from sympy import simplify_logic
 
-from .base import replace_names, test_explanation
-from ..nn import Logic  # , XLogicConv2d
-from ..utils.base import to_categorical
+from torch_explain.logic import test_explanation, replace_names
+from torch_explain.nn import Logic
+from torch_explain.nn.logic import LogicAttention
 
 
 def explain_class(model: torch.nn.Module, x: torch.Tensor, y: torch.Tensor,
-                  target_class: int, topk_explanations: int = 3, max_accuracy: bool = False,
-                  concept_names: List = None) -> str:
+                  target_class: int, max_minterm_complexity: int = None, topk_explanations: int = 3,
+                  max_accuracy: bool = False, concept_names: List = None) -> str:
     """
     Generate a local explanation for a single sample.
 
@@ -35,17 +35,18 @@ def explain_class(model: torch.nn.Module, x: torch.Tensor, y: torch.Tensor,
     is_first = True
     for layer_id, module in enumerate(model.children()):
         # analyze only logic layers
-        if isinstance(module, Logic):  # or isinstance(module, XLogicConv2d):
+        if isinstance(module, LogicAttention):  # or isinstance(module, XLogicConv2d):
 
             if is_first:
                 prev_module = module
                 is_first = False
                 feature_names = [f'feature{j:010}' for j in range(prev_module.conceptizator.concepts.size(1))]
-                c_validation = prev_module.conceptizator.concepts
+                c_validation = prev_module.conceptizator.concepts[0]
 
-            else:
+            elif module.top:
                 explanations = []
-                for neuron in range(module.conceptizator.concepts.size(1)):
+                n_classes = module.conceptizator.concepts.size(0)
+                for neuron in range(n_classes):
                     if module.top and neuron != target_class:
                         continue
 
@@ -64,7 +65,8 @@ def explain_class(model: torch.nn.Module, x: torch.Tensor, y: torch.Tensor,
                                                                                       local_explanations_raw,
                                                                                       c_validation, y_target,
                                                                                       target_class, simplify,
-                                                                                      max_accuracy)
+                                                                                      max_accuracy,
+                                                                                      max_minterm_complexity)
 
                         if local_explanation and local_explanation_raw:
                             local_explanations_raw[local_explanation_raw] = local_explanation_raw
@@ -133,7 +135,7 @@ def _aggregate_explanations(local_explanations, topk_explanations):
         # aggregate example-level explanations
         if local_explanations:
             aggregated_explanation = ' | '.join(most_common_explanations)
-            aggregated_explanation_simplified = simplify_logic(aggregated_explanation, 'dnf', force=False)
+            aggregated_explanation_simplified = simplify_logic(aggregated_explanation, 'dnf', force=True)
             aggregated_explanation_simplified = f'({aggregated_explanation_simplified})'
         else:
             aggregated_explanation_simplified = ''
@@ -141,17 +143,27 @@ def _aggregate_explanations(local_explanations, topk_explanations):
 
 
 def _local_explanation(prev_module, feature_names, neuron_id, neuron_explanations_raw,
-                       c_validation, y_target, target_class, simplify, max_accuracy):
+                       c_validation, y_target, target_class, simplify, max_accuracy, max_minterm_complexity):
     # explanation is the conjunction of non-pruned features
     explanation_raw = ''
-    for j in torch.nonzero(prev_module.weight.sum(axis=0)):
-        if feature_names[j[0]] not in ['()', '']:
+    non_pruned_neurons = prev_module.weight[target_class].abs().mean(axis=0).sum(axis=0)  # TODO: fix this
+    print(non_pruned_neurons)
+    # non_pruned_neurons = prev_module.weight[target_class].sum(axis=0) # TODO: fix this
+    if max_minterm_complexity:
+        neurons_to_retain = torch.argsort(non_pruned_neurons, descending=True)[:max_minterm_complexity]
+    else:
+        neurons_to_retain_idx = (non_pruned_neurons / non_pruned_neurons.max()) > 0.5
+        neurons_sorted = torch.argsort(non_pruned_neurons)
+        neurons_to_retain = neurons_sorted[neurons_to_retain_idx[neurons_sorted]]
+    for j in neurons_to_retain:
+        if feature_names[j] not in ['()', '']:
             if explanation_raw:
                 explanation_raw += ' & '
-            if prev_module.conceptizator.concepts[neuron_id, j[0]] > prev_module.conceptizator.threshold:
-                explanation_raw += feature_names[j[0]]
+            if prev_module.conceptizator.concepts[0][neuron_id, j] > prev_module.conceptizator.threshold:
+                # if non_pruned_neurons[j] > 0:
+                explanation_raw += feature_names[j]
             else:
-                explanation_raw += f'~{feature_names[j[0]]}'
+                explanation_raw += f'~{feature_names[j]}'
 
     explanation_raw = str(explanation_raw)
     if explanation_raw in ['', 'False', 'True', '(False)', '(True)']:
@@ -182,8 +194,9 @@ def _replace_names_dict(class_explanation, class_explanations, concept_names):
 
 
 def _get_validation_data(x, y, model, target_class):
-    threshold = model[0].conceptizator.threshold
-    _, idx = np.unique((x[y.argmax(dim=1) == target_class] >= threshold).cpu().detach().numpy(), axis=0, return_index=True)
+    _, idx = np.unique((x[y.argmax(dim=1) == target_class] >= 0.5).cpu().detach().numpy(), axis=0, return_index=True)
+    if len(idx) == 1:
+        idx = torch.tensor([idx, idx]).squeeze()
     x_target = x[y.argmax(dim=1) == target_class][idx]
     y_target = y[y.argmax(dim=1) == target_class][idx]
 
@@ -199,7 +212,7 @@ def _get_validation_data(x, y, model, target_class):
     y_target_correct = y_target[correct_mask]
 
     # collapse samples having the same boolean values and class label different from the target class
-    _, idx = np.unique((x[y.argmax(dim=1) != target_class] > threshold).cpu().detach().numpy(), axis=0, return_index=True)
+    _, idx = np.unique((x[y.argmax(dim=1) != target_class] > 0.5).cpu().detach().numpy(), axis=0, return_index=True)
     x_reduced_opposite = x[y.argmax(dim=1) != target_class][idx]
     y_reduced_opposite = y[y.argmax(dim=1) != target_class][idx]
     preds_opposite = model(x_reduced_opposite)
