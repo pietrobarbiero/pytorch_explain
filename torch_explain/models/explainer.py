@@ -159,7 +159,7 @@ class MuExplainer(BaseExplainer):
         accuracy, y_formula = test_explanation(class_explanation, target_class=target_class,
                                                x=x_test, y=y_test_1h[:, target_class],
                                                concept_names=concept_names)
-        explanation_fidelity = accuracy_score(y_test_1h[:, target_class], y_formula)
+        explanation_fidelity = accuracy_score(y_test_out.argmax(dim=1), y_formula)
         explanation_complexity = complexity(class_explanation)
         results = {
             'target_class': target_class,

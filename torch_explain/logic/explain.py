@@ -146,8 +146,10 @@ def _local_explanation(prev_module, feature_names, neuron_id, neuron_explanation
                        c_validation, y_target, target_class, simplify, max_accuracy, max_minterm_complexity):
     # explanation is the conjunction of non-pruned features
     explanation_raw = ''
-    non_pruned_neurons = prev_module.weight[target_class].abs().mean(axis=0).sum(axis=0)  # TODO: fix this
-    print(non_pruned_neurons)
+    non_pruned_neurons = prev_module.weight[target_class].norm(p=1, dim=0).norm(p=1, dim=0)#.log()
+    # non_pruned_neurons = torch.softmax(non_pruned_neurons, dim=0)
+    # non_pruned_neurons = prev_module.weight[target_class].abs().mean(axis=0).sum(axis=0)  # TODO: fix this
+    # print(non_pruned_neurons)
     # non_pruned_neurons = prev_module.weight[target_class].sum(axis=0) # TODO: fix this
     if max_minterm_complexity:
         neurons_to_retain = torch.argsort(non_pruned_neurons, descending=True)[:max_minterm_complexity]

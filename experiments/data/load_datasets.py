@@ -1,8 +1,11 @@
 import pandas as pd
 import numpy as np
 import torch
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.impute import SimpleImputer
+from sklearn.model_selection import cross_val_score
 from sklearn.preprocessing import MinMaxScaler, KBinsDiscretizer
+from sklearn.tree import DecisionTreeClassifier
 from torch.utils.data import TensorDataset
 
 
@@ -29,7 +32,7 @@ def load_mimic():
     f2.append('day_icu_intime')
     f2.append('service_unit')
     f2.append('day_28_flg')
-    f2.append('hospital_los_day')
+    # f2.append('hospital_los_day')
     f2.append('icu_exp_flg')
     f2.append('hosp_exp_flg')
     f2.append('censor_flg')
@@ -53,7 +56,14 @@ def load_mimic():
     features = fs + f2d
 
     datax = np.hstack((data1, data2d))
-    datay = data['day_28_flg'].values
+    # datay = data['day_28_flg'].values
+    # datay = (data['hospital_los_day']>6).values
+    datay = data['hosp_exp_flg'].values
+
+    # model = DecisionTreeClassifier()
+    # model = RandomForestClassifier()
+    # scores = cross_val_score(model, datax, datay, cv=10)
+    # print(scores.mean())
 
     x = torch.FloatTensor(datax)
     y = torch.LongTensor(datay)
