@@ -146,7 +146,8 @@ def _local_explanation(prev_module, feature_names, neuron_id, neuron_explanation
                        c_validation, y_target, target_class, simplify, max_accuracy, max_minterm_complexity):
     # explanation is the conjunction of non-pruned features
     explanation_raw = ''
-    non_pruned_neurons = prev_module.weight[target_class].norm(p=1, dim=0).norm(p=1, dim=0)#.log()
+    # non_pruned_neurons = prev_module.weight[target_class].norm(p=1, dim=0).norm(p=1, dim=0)#.log()
+    non_pruned_neurons = prev_module.alpha[target_class]
     # non_pruned_neurons = torch.softmax(non_pruned_neurons, dim=0)
     # non_pruned_neurons = prev_module.weight[target_class].abs().mean(axis=0).sum(axis=0)  # TODO: fix this
     # print(non_pruned_neurons)
@@ -155,7 +156,7 @@ def _local_explanation(prev_module, feature_names, neuron_id, neuron_explanation
         neurons_to_retain = torch.argsort(non_pruned_neurons, descending=True)[:max_minterm_complexity]
     else:
         neurons_to_retain_idx = (non_pruned_neurons / non_pruned_neurons.max()) > 0.5
-        neurons_sorted = torch.argsort(non_pruned_neurons)
+        neurons_sorted = torch.argsort(prev_module.alpha[target_class])
         neurons_to_retain = neurons_sorted[neurons_to_retain_idx[neurons_sorted]]
     for j in neurons_to_retain:
         if feature_names[j] not in ['()', '']:

@@ -4,11 +4,21 @@ from torch_explain.nn import Logic
 from torch_explain.nn.logic import LogicAttention
 
 
+def l1_loss_2(model: torch.nn.Module):
+    loss = 0
+    for module in model.children():
+        if isinstance(module, LogicAttention) and module.shrink:
+            loss += torch.norm(module.weight, 1, dim=1).norm(p=1) + torch.norm(module.bias, 1)
+            loss += torch.norm(module.alpha, p=1)
+    return loss
+
+
 def l1_loss(model: torch.nn.Module):
     loss = 0
     for module in model.children():
         if isinstance(module, LogicAttention) and module.shrink:
             loss += torch.norm(module.weight, 1, dim=1).norm(p=1) + torch.norm(module.bias, 1)
+            # loss += torch.norm(module.alpha, p=1, dim=1).norm(p=1)
     return loss
 
 

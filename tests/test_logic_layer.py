@@ -67,15 +67,15 @@ class TestTemplateObject(unittest.TestCase):
 
             # Problem 1
             x = torch.tensor([
-                [0, 0, 0, 1],
-                [0, 1, 0, 1],
-                [1, 0, 0, 1],
-                [1, 1, 0, 1],
+                [0, 0, 0],
+                [0, 1, 0],
+                [1, 0, 0],
+                [1, 1, 0],
             ], dtype=torch.float)
             y = torch.tensor([0, 1, 1, 0], dtype=torch.long)
 
             layers = [
-                te.nn.LogicAttention(4, 10, n_classes=2, n_heads=1),
+                te.nn.LogicAttention(3, 10, n_classes=2, n_heads=1),
                 torch.nn.LeakyReLU(),
                 te.nn.LogicAttention(10, 10, n_classes=2),
                 torch.nn.LeakyReLU(),
@@ -90,7 +90,8 @@ class TestTemplateObject(unittest.TestCase):
             for epoch in range(1001):
                 optimizer.zero_grad()
                 y_pred = model(x)
-                loss = loss_form(y_pred, y) + 0.0001 * te.nn.functional.l1_loss(model)
+                # loss = loss_form(y_pred, y) + 0.00001 * te.nn.functional.l1_loss(model)
+                loss = loss_form(y_pred, y) + 0.0001 * torch.norm(model[0].beta, p=1)
 
                 loss.backward()
                 optimizer.step()
@@ -99,6 +100,8 @@ class TestTemplateObject(unittest.TestCase):
                 if epoch % 100 == 0:
                     accuracy = y_pred.argmax(dim=1).eq(y).sum().item() / y.size(0)
                     print(f'Epoch {epoch}: loss {loss:.4f} train accuracy: {accuracy:.4f}')
+
+            print(model[0].beta)
 
             y1h = one_hot(y)
             class_explanation, class_explanations = explain_class(model, x, y1h, target_class=0)
