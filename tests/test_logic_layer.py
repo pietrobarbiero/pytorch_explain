@@ -5,7 +5,7 @@ from pytorch_lightning import seed_everything
 from torch.nn.functional import one_hot
 
 import torch_explain as te
-from torch_explain.logic import explain_class
+from torch_explain.logic.nn import explain_class
 
 
 class TestTemplateObject(unittest.TestCase):
@@ -90,8 +90,7 @@ class TestTemplateObject(unittest.TestCase):
             for epoch in range(1001):
                 optimizer.zero_grad()
                 y_pred = model(x)
-                # loss = loss_form(y_pred, y) + 0.00001 * te.nn.functional.l1_loss(model)
-                loss = loss_form(y_pred, y) + 0.0001 * torch.norm(model[0].beta, p=1)
+                loss = loss_form(y_pred, y) + 0.00001 * te.nn.functional.l1_loss(model)
 
                 loss.backward()
                 optimizer.step()
@@ -116,36 +115,37 @@ class TestTemplateObject(unittest.TestCase):
 
         return
 
-    def test_explain_multi_class(self):
-        for i in range(20):
+    def test_explain_class_binary_pruning_bce(self):
+        for i in range(3):
             seed_everything(i)
 
             # Problem 1
             x = torch.tensor([
+                [0, 0, 1, 0],
+                [0, 1, 1, 0],
+                [1, 0, 0, 0],
                 [0, 0, 0, 1],
-                [0, 1, 0, 1],
-                [1, 0, 0, 1],
-                [1, 1, 0, 1],
             ], dtype=torch.float)
             y = torch.tensor([0, 1, 1, 2], dtype=torch.long)
+            y1h = one_hot(y).to(torch.float)
 
             layers = [
-                te.nn.LogicAttention(4, 10, n_classes=3, n_heads=3),
+                te.nn.LogicAttention(4, 10, n_classes=3, n_heads=1),
                 torch.nn.LeakyReLU(),
                 te.nn.LogicAttention(10, 10, n_classes=3),
                 torch.nn.LeakyReLU(),
                 te.nn.LogicAttention(10, 1, n_classes=3, top=True),
-                torch.nn.LogSoftmax(dim=1)
+                torch.nn.Sigmoid()
             ]
             model = torch.nn.Sequential(*layers)
 
-            optimizer = torch.optim.AdamW(model.parameters(), lr=0.001)
-            loss_form = torch.nn.NLLLoss()
+            optimizer = torch.optim.AdamW(model.parameters(), lr=0.01)
+            loss_form = torch.nn.BCELoss()
             model.train()
-            for epoch in range(501):
+            for epoch in range(1001):
                 optimizer.zero_grad()
                 y_pred = model(x)
-                loss = loss_form(y_pred, y) + 0.0001 * te.nn.functional.l1_loss(model)
+                loss = loss_form(y_pred, y1h) + 0.0001 * te.nn.functional.l1_loss(model)
 
                 loss.backward()
                 optimizer.step()
@@ -155,24 +155,21 @@ class TestTemplateObject(unittest.TestCase):
                     accuracy = y_pred.argmax(dim=1).eq(y).sum().item() / y.size(0)
                     print(f'Epoch {epoch}: loss {loss:.4f} train accuracy: {accuracy:.4f}')
 
-            y1h = one_hot(y)
-            class_explanation, class_explanations = explain_class(model, x, y1h, target_class=2)
-            print(class_explanation)
-            print(class_explanations)
-            assert class_explanation == 'feature0000000000 & feature0000000001'
-
-            class_explanation, class_explanations = explain_class(model, x, y1h, target_class=1)
-            print(class_explanation)
-            print(class_explanations)
-            assert class_explanation == '(feature0000000000 & ~feature0000000001) | (feature0000000001 & ~feature0000000000)'
+            print(model[0].beta)
 
             class_explanation, class_explanations = explain_class(model, x, y1h, target_class=0)
             print(class_explanation)
             print(class_explanations)
-            assert class_explanation == '~feature0000000000 & ~feature0000000001'
+
+            class_explanation, class_explanations = explain_class(model, x, y1h, target_class=1)
+            print(class_explanation)
+            print(class_explanations)
+
+            class_explanation, class_explanations = explain_class(model, x, y1h, target_class=2)
+            print(class_explanation)
+            print(class_explanations)
 
         return
-
 
 
 if __name__ == '__main__':

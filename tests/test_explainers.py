@@ -4,6 +4,7 @@ import unittest
 import torch
 from pytorch_lightning.callbacks import ModelCheckpoint
 from sklearn.metrics import accuracy_score
+from torch.nn.functional import one_hot
 from torch.utils.data import DataLoader
 from pytorch_lightning import Trainer, seed_everything
 
@@ -23,9 +24,9 @@ class TestTemplateObject(unittest.TestCase):
         # test_data.tensors = ((test_data.tensors[1]>0.5).to(torch.float),
         #                      (test_data.tensors[1].argmax(dim=1) % 2 == 1).to(torch.long))
         val_data.tensors = (torch.cat((val_data.tensors[1], torch.zeros((val_data.tensors[1].shape[0], 2))), 1),
-                            (val_data.tensors[1].argmax(dim=1) % 2 == 1).to(torch.long))
+                            (one_hot((val_data.tensors[1].argmax(dim=1) % 2 == 1).to(torch.long)).to(torch.float)))
         test_data.tensors = (torch.cat((test_data.tensors[1], torch.zeros((test_data.tensors[1].shape[0], 2))), 1),
-                             (test_data.tensors[1].argmax(dim=1) % 2 == 1).to(torch.long))
+                             (one_hot((test_data.tensors[1].argmax(dim=1) % 2 == 1).to(torch.long)).to(torch.float)))
         # train_loader = DataLoader(train_data, batch_size=180)
         val_loader = DataLoader(val_data, batch_size=180)
         test_loader = DataLoader(test_data, batch_size=180)
@@ -41,14 +42,14 @@ class TestTemplateObject(unittest.TestCase):
                           weights_save_path=base_dir, profiler="simple",
                           callbacks=[checkpoint_callback])
 
-        model = MuExplainer(n_concepts=12, n_classes=2, concept_activation='identity_bool', l1=0.001, lr=0.01)
+        model = MuExplainer(n_concepts=12, n_classes=2, l1=0.001, lr=0.01)
         trainer.fit(model, val_loader, val_loader)
 
         model.freeze()
         trainer.test(model, test_dataloaders=test_loader)
-        results = model.explain_class(val_loader, test_loader, target_class=1,
-                                      topk_explanations=10, max_minterm_complexity=5)
+        results = model.explain_class(val_loader, test_loader, target_class=0, topk_explanations=20)
         print(results)
+        assert results['explanation'] == 'feature0000000000 | feature0000000002 | feature0000000004 | feature0000000006 | feature0000000008'
 
 
 if __name__ == '__main__':

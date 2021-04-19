@@ -13,16 +13,20 @@
 # import os
 # import sys
 # sys.path.insert(0, os.path.abspath('.'))
+import datetime
 import os
 import sys
-
 sys.path.insert(0, os.path.abspath('../'))
+import torch_explain
 
 # -- Project information -----------------------------------------------------
 
-project = 'Project Template'
-copyright = '2020, Pietro Barbiero'
+project = 'pytorch_geometric'
 author = 'Pietro Barbiero'
+copyright = '{}, {}'.format(datetime.datetime.now().year, author)
+
+version = torch_explain.__version__
+release = torch_explain.__version__
 
 
 # -- General configuration ---------------------------------------------------
@@ -50,10 +54,11 @@ exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 #
 # html_theme = 'alabaster'
 html_theme = "sphinx_rtd_theme"
+html_logo = '_static/img/pyg_logo_text.svg'
 
 html_theme_options = {
-    'canonical_url': 'https://dbgen.readthedocs.io/en/latest/',
-    'logo_only': False,
+    'canonical_url': 'https://pytorch_explain.readthedocs.io/en/latest/',
+    'logo_only': True,
     'display_version': True,
     'prev_next_buttons_location': 'bottom',
     'style_external_links': False,

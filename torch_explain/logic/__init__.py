@@ -1,6 +1,6 @@
-from .base import replace_names, test_explanation
-from .explain import explain_class
-from .metrics import concept_consistency, formula_consistency, complexity
+from .utils import replace_names
+from .nn import explain_class
+from .metrics import test_explanation, concept_consistency, formula_consistency, complexity
 
 __all__ = [
     'explain_class',

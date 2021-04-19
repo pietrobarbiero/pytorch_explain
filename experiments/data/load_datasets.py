@@ -6,6 +6,7 @@ from sklearn.impute import SimpleImputer
 from sklearn.model_selection import cross_val_score
 from sklearn.preprocessing import MinMaxScaler, KBinsDiscretizer
 from sklearn.tree import DecisionTreeClassifier
+from torch.nn.functional import one_hot
 from torch.utils.data import TensorDataset
 
 
@@ -66,5 +67,5 @@ def load_mimic():
     # print(scores.mean())
 
     x = torch.FloatTensor(datax)
-    y = torch.LongTensor(datay)
+    y = one_hot(torch.tensor(datay).to(torch.long)).to(torch.float)
     return x, y, features

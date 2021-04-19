@@ -70,4 +70,4 @@ def concept_accuracy(y_out, y):
 
 
 def task_accuracy(y_out, y):
-    return y_out.argmax(dim=1).eq(y).sum() / len(y)
+    return y_out.argmax(dim=1).eq(y.argmax(dim=1)).sum() / len(y)
