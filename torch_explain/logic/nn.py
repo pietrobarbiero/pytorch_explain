@@ -84,9 +84,10 @@ def explain_class(model: torch.nn.Module, x: torch.Tensor, y: torch.Tensor,
                     aggregated_explanation = ''
                 class_explanation = str(aggregated_explanation)
 
+    class_explanation_raw = class_explanation
     class_explanation, class_explanations = _replace_names_dict(class_explanation, class_explanations, concept_names)
 
-    return class_explanation[1:-1], class_explanations
+    return class_explanation[1:-1], class_explanations, class_explanation_raw
 
 
 def _simplify_formula(explanation: str, x: torch.Tensor, y: torch.Tensor, target_class: int, max_accuracy: bool) -> str:
