@@ -138,11 +138,15 @@ class MuExplainer(BaseExplainer):
                                                                              max_minterm_complexity=max_minterm_complexity,
                                                                              concept_names=concept_names,
                                                                              max_accuracy=max_accuracy)
-            accuracy, y_formula = test_explanation(explanation_raw, target_class=target_class,
-                                                   x=x_test, y=y_test_1h[:, target_class])
-            explanation_fidelity = accuracy_score(y_test_out[:, target_class] > 0.5, y_formula)
-            # explanation_fidelity = accuracy_score(y_test_out.argmax(dim=1).eq(target_class), y_formula)
-            explanation_complexity = complexity(class_explanation)
+            if explanation_raw is not None:
+                accuracy, y_formula = test_explanation(explanation_raw, target_class=target_class,
+                                                       x=x_test, y=y_test_1h[:, target_class])
+                explanation_fidelity = accuracy_score(y_test_out[:, target_class] > 0.5, y_formula)
+                # explanation_fidelity = accuracy_score(y_test_out.argmax(dim=1).eq(target_class), y_formula)
+                explanation_complexity = complexity(class_explanation)
+            else:
+                accuracy, explanation_fidelity, explanation_complexity = 0, 0, 0
+                class_explanation = ''
             results = {
                 'target_class': target_class,
                 'explanation': class_explanation,

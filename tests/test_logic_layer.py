@@ -115,6 +115,60 @@ class TestTemplateObject(unittest.TestCase):
 
         return
 
+    def test_explain_class_binary_pruning_entropy(self):
+        for i in range(20):
+            seed_everything(i)
+
+            # Problem 1
+            x = torch.tensor([
+                [0, 0, 0],
+                [0, 1, 0],
+                [1, 0, 0],
+                [1, 1, 0],
+            ], dtype=torch.float)
+            y = torch.tensor([0, 1, 1, 0], dtype=torch.long)
+
+            layers = [
+                te.nn.LogicAttention(3, 10, n_classes=2, n_heads=1),
+                torch.nn.LeakyReLU(),
+                te.nn.LogicAttention(10, 10, n_classes=2),
+                torch.nn.LeakyReLU(),
+                te.nn.LogicAttention(10, 1, n_classes=2, top=True),
+                torch.nn.LogSoftmax(dim=1)
+            ]
+            model = torch.nn.Sequential(*layers)
+
+            optimizer = torch.optim.AdamW(model.parameters(), lr=0.01)
+            loss_form = torch.nn.NLLLoss()
+            model.train()
+            for epoch in range(1001):
+                optimizer.zero_grad()
+                y_pred = model(x)
+                loss = loss_form(y_pred, y) + 0.001 * te.nn.functional.l1_loss(model)
+
+                loss.backward()
+                optimizer.step()
+
+                # compute accuracy
+                if epoch % 100 == 0:
+                    accuracy = y_pred.argmax(dim=1).eq(y).sum().item() / y.size(0)
+                    print(f'Epoch {epoch}: loss {loss:.4f} train accuracy: {accuracy:.4f}')
+
+            print(model[0].beta)
+
+            y1h = one_hot(y)
+            class_explanation, class_explanations, _ = explain_class(model, x, y1h, target_class=0)
+            print(class_explanation)
+            print(class_explanations)
+            assert class_explanation == '(feature0000000000 & feature0000000001) | (~feature0000000000 & ~feature0000000001)'
+
+            class_explanation, class_explanations, _ = explain_class(model, x, y1h, target_class=1)
+            print(class_explanation)
+            print(class_explanations)
+            assert class_explanation == '(feature0000000000 & ~feature0000000001) | (feature0000000001 & ~feature0000000000)'
+
+        return
+
     def test_explain_class_binary_pruning_bce(self):
         for i in range(3):
             seed_everything(i)

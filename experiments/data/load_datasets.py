@@ -62,8 +62,8 @@ def load_mimic():
     # datay = (data['hospital_los_day']>6).values
     datay = data['hosp_exp_flg'].values
 
-    # model = DecisionTreeClassifier()
-    # model = RandomForestClassifier()
+    # model = DecisionTreeClassifier(max_depth=3)
+    # # model = RandomForestClassifier()
     # scores = cross_val_score(model, datax, datay, cv=10)
     # print(scores.mean())
 

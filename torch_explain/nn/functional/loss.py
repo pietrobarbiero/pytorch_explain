@@ -8,6 +8,9 @@ def l1_loss(model: torch.nn.Module):
     for module in model.children():
         if isinstance(module, LogicAttention) and module.shrink:
             loss += torch.norm(module.beta, 1)
+            # loss += torch.norm(module.weight, 1)
+            # for alpha in module.alpha:
+            #     loss -= torch.sum(alpha * torch.log(alpha))
             break
     return loss
 
