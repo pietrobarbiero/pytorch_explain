@@ -37,19 +37,20 @@ class TestTemplateObject(unittest.TestCase):
 
         # training
         checkpoint_callback = ModelCheckpoint(dirpath=base_dir, monitor='val_loss', save_top_k=1)
-        trainer = Trainer(max_epochs=10, gpus=1, auto_lr_find=True, deterministic=False,
+        trainer = Trainer(max_epochs=20, gpus=1, auto_lr_find=True, deterministic=True,
                           check_val_every_n_epoch=1, default_root_dir=base_dir,
                           weights_save_path=base_dir, profiler="simple",
                           callbacks=[checkpoint_callback])
 
-        model = MuExplainer(n_concepts=12, n_classes=2, l1=0.001, lr=0.01)
+        model = MuExplainer(n_concepts=12, n_classes=2, l1=0.01, lr=0.01, explainer_hidden=[10, 10])
         trainer.fit(model, val_loader, val_loader)
 
         model.freeze()
         trainer.test(model, test_dataloaders=test_loader)
-        results = model.explain_class(val_loader, test_loader, target_class=0, topk_explanations=20)
+        results, results_full = model.explain_class(val_loader, test_loader,
+                                                    topk_explanations=100, max_minterm_complexity=10)
         print(results)
-        assert results['explanation'] == 'feature0000000000 | feature0000000002 | feature0000000004 | feature0000000006 | feature0000000008'
+        assert results_full[0]['explanation'] == '(feature0000000000 & ~feature0000000001 & ~feature0000000002 & ~feature0000000003 & ~feature0000000004 & ~feature0000000005 & ~feature0000000006 & ~feature0000000007 & ~feature0000000008 & ~feature0000000009) | (feature0000000002 & ~feature0000000000 & ~feature0000000001 & ~feature0000000003 & ~feature0000000004 & ~feature0000000005 & ~feature0000000006 & ~feature0000000007 & ~feature0000000008 & ~feature0000000009) | (feature0000000004 & ~feature0000000000 & ~feature0000000001 & ~feature0000000002 & ~feature0000000003 & ~feature0000000005 & ~feature0000000006 & ~feature0000000007 & ~feature0000000008 & ~feature0000000009) | (feature0000000006 & ~feature0000000000 & ~feature0000000001 & ~feature0000000002 & ~feature0000000003 & ~feature0000000004 & ~feature0000000005 & ~feature0000000007 & ~feature0000000008 & ~feature0000000009) | (feature0000000008 & ~feature0000000000 & ~feature0000000001 & ~feature0000000002 & ~feature0000000003 & ~feature0000000004 & ~feature0000000005 & ~feature0000000006 & ~feature0000000007 & ~feature0000000009)'
 
 
 if __name__ == '__main__':

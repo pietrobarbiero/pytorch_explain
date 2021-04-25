@@ -60,7 +60,8 @@ def explain_class(model: torch.nn.Module, x: torch.Tensor, y: torch.Tensor,
 
                     neuron_list = torch.nonzero(y_target)
                     for i in neuron_list:
-                        simplify = True if module.top else False
+                        # simplify = True if module.top else False
+                        simplify = False
                         local_explanation, local_explanation_raw = _local_explanation(prev_module, feature_names, i,
                                                                                       local_explanations_raw,
                                                                                       c_validation, y_target,
@@ -147,7 +148,7 @@ def _local_explanation(prev_module, feature_names, neuron_id, neuron_explanation
                        c_validation, y_target, target_class, simplify, max_accuracy, max_minterm_complexity):
     # explanation is the conjunction of non-pruned features
     explanation_raw = ''
-    non_pruned_neurons = prev_module.alpha[target_class]
+    non_pruned_neurons = prev_module.beta[target_class]
     if max_minterm_complexity:
         neurons_to_retain = torch.argsort(non_pruned_neurons, descending=True)[:max_minterm_complexity]
     else:

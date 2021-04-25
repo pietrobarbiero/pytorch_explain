@@ -106,12 +106,12 @@ class TestTemplateObject(unittest.TestCase):
             print(model[0].beta)
 
             y1h = one_hot(y)
-            class_explanation, class_explanations = explain_class(model, x, y1h, target_class=0)
+            class_explanation, class_explanations, _ = explain_class(model, x, y1h, target_class=0)
             print(class_explanation)
             print(class_explanations)
             assert class_explanation == '(feature0000000000 & feature0000000001) | (~feature0000000000 & ~feature0000000001)'
 
-            class_explanation, class_explanations = explain_class(model, x, y1h, target_class=1)
+            class_explanation, class_explanations, _ = explain_class(model, x, y1h, target_class=1)
             print(class_explanation)
             print(class_explanations)
             assert class_explanation == '(feature0000000000 & ~feature0000000001) | (feature0000000001 & ~feature0000000000)'
@@ -160,15 +160,15 @@ class TestTemplateObject(unittest.TestCase):
 
             print(model[0].beta)
 
-            class_explanation, class_explanations = explain_class(model, x, y1h, target_class=0)
+            class_explanation, class_explanations, _ = explain_class(model, x, y1h, target_class=0)
             print(class_explanation)
             print(class_explanations)
 
-            class_explanation, class_explanations = explain_class(model, x, y1h, target_class=1)
+            class_explanation, class_explanations, _ = explain_class(model, x, y1h, target_class=1)
             print(class_explanation)
             print(class_explanations)
 
-            class_explanation, class_explanations = explain_class(model, x, y1h, target_class=2)
+            class_explanation, class_explanations, _ = explain_class(model, x, y1h, target_class=2)
             print(class_explanation)
             print(class_explanations)
 
