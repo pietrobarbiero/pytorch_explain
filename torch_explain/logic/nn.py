@@ -9,7 +9,7 @@ from sympy import simplify_logic
 
 from torch_explain.logic.metrics import test_explanation
 from torch_explain.logic.utils import replace_names
-from torch_explain.nn.logic import LogicAttention
+from torch_explain.nn.logic import ConceptAwareness
 
 
 def explain_class(model: torch.nn.Module, x: torch.Tensor, y: torch.Tensor,
@@ -35,7 +35,7 @@ def explain_class(model: torch.nn.Module, x: torch.Tensor, y: torch.Tensor,
     is_first = True
     for layer_id, module in enumerate(model.children()):
         # analyze only logic layers
-        if isinstance(module, LogicAttention):  # or isinstance(module, XLogicConv2d):
+        if isinstance(module, ConceptAwareness):  # or isinstance(module, XLogicConv2d):
 
             if is_first:
                 prev_module = module
