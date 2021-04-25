@@ -5,6 +5,7 @@ from pytorch_lightning import seed_everything
 from torch.nn.functional import one_hot
 
 import torch_explain as te
+from torch_explain.logic import test_explanation
 from torch_explain.logic.nn import explain_class
 
 
@@ -23,11 +24,11 @@ class TestTemplateObject(unittest.TestCase):
             y = torch.tensor([0, 1, 1, 0], dtype=torch.long)
 
             layers = [
-                te.nn.LogicAttention(2, 10, n_classes=2, n_heads=1),
+                te.nn.ConceptAwareness(2, 10, n_classes=2, n_heads=1),
                 torch.nn.LeakyReLU(),
-                te.nn.LogicAttention(10, 10, n_classes=2),
+                te.nn.ConceptAwareness(10, 10, n_classes=2),
                 torch.nn.LeakyReLU(),
-                te.nn.LogicAttention(10, 1, n_classes=2, top=True),
+                te.nn.ConceptAwareness(10, 1, n_classes=2, top=True),
                 torch.nn.LogSoftmax(dim=1)
             ]
             model = torch.nn.Sequential(*layers)
@@ -49,14 +50,16 @@ class TestTemplateObject(unittest.TestCase):
                     print(f'Epoch {epoch}: loss {loss:.4f} train accuracy: {accuracy:.4f}')
 
             y1h = one_hot(y)
-            class_explanation, class_explanations = explain_class(model, x, y1h, target_class=0)
+            class_explanation, class_explanations, _ = explain_class(model, x, y1h, target_class=0)
             print(class_explanation)
             print(class_explanations)
+            print(test_explanation(class_explanation, 0, x, y1h[:, 0]))
             assert class_explanation == '(feature0000000000 & feature0000000001) | (~feature0000000000 & ~feature0000000001)'
 
-            class_explanation, class_explanations = explain_class(model, x, y1h, target_class=1)
+            class_explanation, class_explanations, _ = explain_class(model, x, y1h, target_class=1)
             print(class_explanation)
             print(class_explanations)
+            print(test_explanation(class_explanation, 1, x, y1h[:, 1]))
             assert class_explanation == '(feature0000000000 & ~feature0000000001) | (feature0000000001 & ~feature0000000000)'
 
         return
@@ -75,11 +78,11 @@ class TestTemplateObject(unittest.TestCase):
             y = torch.tensor([0, 1, 1, 0], dtype=torch.long)
 
             layers = [
-                te.nn.LogicAttention(3, 10, n_classes=2, n_heads=1),
+                te.nn.ConceptAwareness(3, 10, n_classes=2, n_heads=1),
                 torch.nn.LeakyReLU(),
-                te.nn.LogicAttention(10, 10, n_classes=2),
+                te.nn.ConceptAwareness(10, 10, n_classes=2),
                 torch.nn.LeakyReLU(),
-                te.nn.LogicAttention(10, 1, n_classes=2, top=True),
+                te.nn.ConceptAwareness(10, 1, n_classes=2, top=True),
                 torch.nn.LogSoftmax(dim=1)
             ]
             model = torch.nn.Sequential(*layers)
@@ -130,11 +133,11 @@ class TestTemplateObject(unittest.TestCase):
             y1h = one_hot(y).to(torch.float)
 
             layers = [
-                te.nn.LogicAttention(4, 10, n_classes=3, n_heads=1),
+                te.nn.ConceptAwareness(4, 10, n_classes=3, n_heads=1),
                 torch.nn.LeakyReLU(),
-                te.nn.LogicAttention(10, 10, n_classes=3),
+                te.nn.ConceptAwareness(10, 10, n_classes=3),
                 torch.nn.LeakyReLU(),
-                te.nn.LogicAttention(10, 1, n_classes=3, top=True),
+                te.nn.ConceptAwareness(10, 1, n_classes=3, top=True),
                 torch.nn.Sigmoid()
             ]
             model = torch.nn.Sequential(*layers)

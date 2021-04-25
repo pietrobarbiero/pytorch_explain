@@ -8,16 +8,18 @@ import torch.nn.functional as F
 from .concepts import Conceptizator
 
 
-class LogicAttention(Linear):
+class ConceptAwareness(Linear):
     """Applies a linear transformation to the incoming data: :math:`y = xA^T + b`
     """
 
-    def __init__(self, in_features: int, out_features: int, n_classes: int, n_heads: int = None,
-                 top: bool = False, bias: bool = True) -> None:
-        super(LogicAttention, self).__init__(in_features, out_features, bias)
+    def __init__(self, in_features: int, out_features: int, n_classes: int,
+                 awareness: bool = False,
+                 n_heads: int = None, top: bool = False, bias: bool = True) -> None:
+        super(ConceptAwareness, self).__init__(in_features, out_features, bias)
         self.n_classes = n_classes
         self.n_heads = n_heads
         self.top = top
+        self.awareness = awareness
         self.conceptizator = Conceptizator('identity_bool')
         if n_heads is not None:
             self.shrink = True
@@ -160,13 +162,13 @@ class Attention(Module):
 
 if __name__ == '__main__':
     data = torch.rand((10, 5))
-    layer = LogicAttention(5, 4, 2)
+    layer = ConceptAwareness(5, 4, 2)
     out = layer(data)
     print(out.shape)
-    layer2 = LogicAttention(4, 3, 2)
+    layer2 = ConceptAwareness(4, 3, 2)
     out2 = layer2(out)
     print(out2.shape)
-    layer2 = LogicAttention(3, 1, 2)
+    layer2 = ConceptAwareness(3, 1, 2)
     out3 = layer2(out2).view(-1, 2)
     print(out3.shape)
     print(out3)

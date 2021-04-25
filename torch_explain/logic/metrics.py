@@ -5,7 +5,7 @@ import sympy
 import torch
 import numpy as np
 from sklearn.metrics import accuracy_score
-from sympy import to_dnf
+from sympy import to_dnf, lambdify
 
 
 def test_explanation(explanation: str, target_class: int, x: torch.Tensor, y: torch.Tensor,
@@ -38,28 +38,15 @@ def test_explanation(explanation: str, target_class: int, x: torch.Tensor, y: to
         predictions = torch.cat(local_predictions).eq(target_class).cpu().detach().numpy()
     else:
 
+        concept_list = [f"feature{i:010}" for i in range(x.shape[1])]
         if concept_names is not None:
             for i, concept_name in enumerate(concept_names):
                 explanation = explanation.replace(concept_name, f"feature{i:010}")
 
         explanation = to_dnf(explanation)
-        minterms = str(explanation).split(' | ')
-        x = x > 0.5
-        local_predictions = []
-        for minterm in minterms:
-            minterm = minterm.replace('(', '').replace(')', '').split(' & ')
-            features = []
-            for terms in minterm:
-                terms = terms.split('feature')
-                if terms[0] == '~':
-                    features.append(~x[:, int(terms[1])])
-                else:
-                    features.append(x[:, int(terms[1])])
-
-            local_prediction = torch.stack(features, dim=0).prod(dim=0)
-            local_predictions.append(local_prediction)
-
-        predictions = (torch.stack(local_predictions, dim=0).sum(dim=0) > 0).cpu().detach().numpy()
+        fun = lambdify(concept_list, explanation, 'numpy')
+        x = x.cpu().detach().numpy()
+        predictions = fun(*[x[:, i] > 0.5 for i in range(x.shape[1])])
 
     accuracy = metric(y, predictions)
     return accuracy, predictions

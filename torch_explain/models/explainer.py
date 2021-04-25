@@ -19,7 +19,7 @@ from torch_explain.logic.metrics import test_explanation, complexity
 from torch_explain.models.base import task_accuracy, BaseClassifier, concept_accuracy
 from torch_explain.nn import Conceptizator
 from torch_explain.nn.functional import l1_loss
-from torch_explain.nn.logic import LogicAttention
+from torch_explain.nn.logic import ConceptAwareness
 
 
 class BaseExplainer(BaseClassifier):
@@ -85,15 +85,15 @@ class MuExplainer(BaseExplainer):
                          accuracy_score, explainer_hidden, l1)
 
         self.model_layers = []
-        self.model_layers.append(LogicAttention(n_concepts, explainer_hidden[0], n_classes, n_heads=1))
+        self.model_layers.append(ConceptAwareness(n_concepts, explainer_hidden[0], n_classes, n_heads=1))
         self.model_layers.append(torch.nn.LeakyReLU())
         self.model_layers.append(Dropout())
         for i in range(1, len(explainer_hidden)):
-            self.model_layers.append(LogicAttention(explainer_hidden[i - 1], explainer_hidden[i], n_classes))
+            self.model_layers.append(ConceptAwareness(explainer_hidden[i - 1], explainer_hidden[i], n_classes))
             self.model_layers.append(torch.nn.LeakyReLU())
             self.model_layers.append(Dropout())
 
-        self.model_layers.append(LogicAttention(explainer_hidden[-1], 1, n_classes, top=True))
+        self.model_layers.append(ConceptAwareness(explainer_hidden[-1], 1, n_classes, top=True))
         self.model_layers.append(torch.nn.LogSoftmax(dim=1))
         # self.model_layers.append(torch.nn.Sigmoid())
 
@@ -164,14 +164,14 @@ class MuExplainer(BaseExplainer):
     # def inspect(self, dataloader):
     #     x, y_out, y_1h = self.transform(dataloader, y_to_one_hot=False)
     #     h_prev = x
-    #     n_layers = len([1 for module in self.model.modules() if isinstance(module, LogicAttention)])-1
+    #     n_layers = len([1 for module in self.model.modules() if isinstance(module, ConceptAwareness)])-1
     #     layer_id = 1
     #     plt.figure(figsize=[10, 4])
     #     for module in self.model.modules():
     #         if isinstance(module, nn.Sequential) or isinstance(module, Conceptizator):
     #             continue
     #         h = module(h_prev)
-    #         if isinstance(module, LogicAttention) and not module.top:
+    #         if isinstance(module, ConceptAwareness) and not module.top:
     #             plt.subplot(1, n_layers, layer_id)
     #             plt.title(f'Layer {layer_id}')
     #             sns.scatterplot(x=h_prev.view(-1), y=module.conceptizator.concepts.view(-1))
