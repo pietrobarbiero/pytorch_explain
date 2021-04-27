@@ -55,7 +55,7 @@ class ConceptAwareness(Linear):
             self.gamma = self.weight.norm(dim=1)
             self.alpha = torch.softmax(self.gamma, dim=1)
             self.beta = self.alpha / self.alpha.max(dim=1)[0].unsqueeze(1)
-            x = input.multiply(self.beta.unsqueeze(1))
+            # x = input.multiply(self.beta.unsqueeze(1))
             x = x.matmul(self.weight.permute(0, 2, 1)) + self.bias
         else:
             x = x.matmul(self.weight.permute(0, 2, 1)) + self.bias

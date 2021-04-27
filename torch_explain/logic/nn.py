@@ -28,7 +28,7 @@ def explain_class(model: torch.nn.Module, x: torch.Tensor, y: torch.Tensor,
     """
     x_validation, y_validation = _get_validation_data(x, y, model, target_class)
     if x_validation is None:
-        return None, None
+        return None, None, None
 
     class_explanation = ''
     class_explanations = {}
@@ -194,11 +194,13 @@ def _replace_names_dict(class_explanation, class_explanations, concept_names):
 
 
 def _get_validation_data(x, y, model, target_class):
-    _, idx = np.unique((x[y.argmax(dim=1) == target_class] >= 0.5).cpu().detach().numpy(), axis=0, return_index=True)
-    if len(idx) == 1:
-        idx = torch.tensor([idx, idx]).squeeze()
-    x_target = x[y.argmax(dim=1) == target_class][idx]
-    y_target = y[y.argmax(dim=1) == target_class][idx]
+    # _, idx = np.unique((x[y.argmax(dim=1) == target_class] >= 0.5).cpu().detach().numpy(), axis=0, return_index=True)
+    # if len(idx) == 1:
+    #     idx = torch.tensor([idx, idx]).squeeze()
+    # x_target = x[y.argmax(dim=1) == target_class][idx]
+    # y_target = y[y.argmax(dim=1) == target_class][idx]
+    x_target = x[y.argmax(dim=1) == target_class]
+    y_target = y[y.argmax(dim=1) == target_class]
 
     # get model's predictions
     preds = model(x_target)
@@ -212,9 +214,11 @@ def _get_validation_data(x, y, model, target_class):
     y_target_correct = y_target[correct_mask]
 
     # collapse samples having the same boolean values and class label different from the target class
-    _, idx = np.unique((x[y.argmax(dim=1) != target_class] > 0.5).cpu().detach().numpy(), axis=0, return_index=True)
-    x_reduced_opposite = x[y.argmax(dim=1) != target_class][idx]
-    y_reduced_opposite = y[y.argmax(dim=1) != target_class][idx]
+    # _, idx = np.unique((x[y.argmax(dim=1) != target_class] > 0.5).cpu().detach().numpy(), axis=0, return_index=True)
+    # x_reduced_opposite = x[y.argmax(dim=1) != target_class][idx]
+    # y_reduced_opposite = y[y.argmax(dim=1) != target_class][idx]
+    x_reduced_opposite = x[y.argmax(dim=1) != target_class]
+    y_reduced_opposite = y[y.argmax(dim=1) != target_class]
     preds_opposite = model(x_reduced_opposite)
 
     # identify samples correctly classified of the opposite class
