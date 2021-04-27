@@ -8,19 +8,21 @@ import torch.nn.functional as F
 from .concepts import Conceptizator
 
 
-class ConceptAwareness(Linear):
+class ConceptAwareness(Module):
     """Applies a linear transformation to the incoming data: :math:`y = xA^T + b`
     """
+    weight1: Tensor
 
     def __init__(self, in_features: int, out_features: int, n_classes: int,
                  awareness: bool = False,
                  n_heads: int = None, top: bool = False, bias: bool = True) -> None:
-        super(ConceptAwareness, self).__init__(in_features, out_features, bias)
+        super(ConceptAwareness, self).__init__()
         self.n_classes = n_classes
         self.n_heads = n_heads
         self.top = top
         self.awareness = awareness
         self.conceptizator = Conceptizator('identity_bool')
+        self.weight1 = Parameter(torch.Tensor(n_classes, in_features))
         if n_heads is not None:
             self.shrink = True
             self.gamma = None
@@ -40,6 +42,7 @@ class ConceptAwareness(Linear):
         self.reset_parameters()
 
     def reset_parameters(self) -> None:
+        init.kaiming_uniform_(self.weight1, a=math.sqrt(5))
         init.kaiming_uniform_(self.weight, a=math.sqrt(5))
         if self.bias is not None:
             fan_in, _ = init._calculate_fan_in_and_fan_out(self.weight)
@@ -52,10 +55,15 @@ class ConceptAwareness(Linear):
         self.conceptizator.concepts = input
         x = input
         if self.shrink:
-            self.gamma = self.weight.norm(dim=1)
-            self.alpha = torch.softmax(self.gamma, dim=1)
-            self.beta = self.alpha / self.alpha.max(dim=1)[0].unsqueeze(1)
-            # x = input.multiply(self.beta.unsqueeze(1))
+            # self.alpha = torch.sigmoid(self.weight1)
+            self.alpha = torch.softmax(self.weight1, dim=1)
+            self.beta = self.alpha
+            x = x.multiply(self.alpha.unsqueeze(1))
+            # self.gamma = self.weight.norm(dim=1)
+            # self.alpha = torch.softmax(self.gamma, dim=1)
+            # self.alpha = torch.sigmoid(self.gamma)
+            # self.alpha = self.gamma
+            # self.beta = self.alpha / self.alpha.max(dim=1)[0].unsqueeze(1)
             x = x.matmul(self.weight.permute(0, 2, 1)) + self.bias
         else:
             x = x.matmul(self.weight.permute(0, 2, 1)) + self.bias

@@ -71,9 +71,9 @@ for split, (trainval_index, test_index) in enumerate(
                       check_val_every_n_epoch=1, default_root_dir=base_dir,
                       weights_save_path=base_dir, callbacks=[checkpoint_callback])
     model = MuExplainer(n_concepts=n_concepts, n_classes=n_classes,
-                        l1=1,
-                        explainer_hidden=[100, 50, 10],
-                        lr=0.0005)
+                        l1=0.01,
+                        explainer_hidden=[10],
+                        lr=0.01)
 
     path = glob.glob(f'{base_dir}/*.ckpt')
     if path:
@@ -82,7 +82,7 @@ for split, (trainval_index, test_index) in enumerate(
     model.freeze()
     model_results = trainer.test(model, test_dataloaders=test_loader)
     results, results_full = model.explain_class(val_loader, test_loader,
-                                                topk_explanations=10, max_minterm_complexity=5,
+                                                topk_explanations=1, max_minterm_complexity=3,
                                                 concept_names=concept_names)
     results['model_accuracy'] = model_results[0]['test_acc']
     print(f"Explanation: {results_full[0]['explanation']}")
@@ -92,11 +92,13 @@ for split, (trainval_index, test_index) in enumerate(
 
     plt.figure(figsize=[8, 4])
     plt.subplot(1, 2, 1)
-    plt.title(f'Weight matrix - {results["model_accuracy"]:.4f}')
-    sns.heatmap(model.model[0].weight[0].abs())
+    plt.title(f'Alpha - {results["model_accuracy"]:.4f}')
+    # sns.heatmap(model.model[0].weight[0].abs())
+    sns.histplot(model.model[0].alpha[0])
     plt.subplot(1, 2, 2)
-    plt.title(f'Weight matrix - {results["model_accuracy"]:.4f}')
-    sns.heatmap(model.model[0].weight[1].abs())
+    plt.title(f'Alpha - {results["model_accuracy"]:.4f}')
+    # sns.heatmap(model.model[0].weight[1].abs())
+    sns.histplot(model.model[0].alpha[1])
     plt.tight_layout()
     # plt.savefig('./results/mimic-ii/l1_gamma.png')
     # plt.savefig('./results/mimic-ii/l1_weight.png')

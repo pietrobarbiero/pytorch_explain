@@ -79,24 +79,23 @@ class BaseExplainer(BaseClassifier):
 
 class MuExplainer(BaseExplainer):
     def __init__(self, n_concepts: int, n_classes: int, optimizer: str = 'adamw',
-                 loss: _Loss = nn.BCEWithLogitsLoss(),
+                 loss: _Loss = nn.NLLLoss(),
                  lr: float = 1e-2, activation: callable = F.log_softmax, accuracy_score: callable = task_accuracy,
                  explainer_hidden: list = (8, 3), l1: float = 1e-5):
         super().__init__(n_concepts, n_classes, optimizer, loss, lr, activation,
                          accuracy_score, explainer_hidden, l1)
 
         self.model_layers = []
-        self.model_layers.append(ConceptAwareness(n_concepts, explainer_hidden[0], n_classes, n_heads=1))
+        self.model_layers.append(ConceptAwareness(n_concepts, explainer_hidden[0], n_classes, n_heads=5))
         self.model_layers.append(torch.nn.LeakyReLU())
         self.model_layers.append(Dropout())
-        for i in range(1, len(explainer_hidden)):
-            self.model_layers.append(ConceptAwareness(explainer_hidden[i - 1], explainer_hidden[i], n_classes))
-            self.model_layers.append(torch.nn.LeakyReLU())
-            self.model_layers.append(Dropout())
+        # for i in range(1, len(explainer_hidden)):
+        #     self.model_layers.append(ConceptAwareness(explainer_hidden[i - 1], explainer_hidden[i], n_classes))
+        #     self.model_layers.append(torch.nn.LeakyReLU())
+        #     self.model_layers.append(Dropout())
 
         self.model_layers.append(ConceptAwareness(explainer_hidden[-1], 1, n_classes, top=True))
-        # self.model_layers.append(torch.nn.LogSoftmax(dim=1))
-        # self.model_layers.append(torch.nn.Sigmoid())
+        self.model_layers.append(torch.nn.LogSoftmax(dim=1))
 
         self.model = torch.nn.Sequential(*self.model_layers)
 

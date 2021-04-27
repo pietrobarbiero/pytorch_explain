@@ -19,8 +19,10 @@ def concept_awareness_loss(model: torch.nn.Module):
             # loss += torch.norm(module.gamma, 1)
             # loss += torch.norm(module.weight, 1)
             # loss += torch.norm(module.beta, 1)
-            loss -= torch.sum(module.alpha.squeeze() * torch.log(module.alpha.squeeze()))
-            # loss -= torch.norm(module.alpha.squeeze(), p=1)
+            # loss -= torch.sum(module.alpha.squeeze() * torch.log(module.alpha.squeeze()))
+            for alphas in module.alpha:
+                loss -= torch.sum(alphas * torch.log(alphas))
+            # loss += torch.norm(module.alpha.squeeze(), p=1)
             break
     return loss
 
