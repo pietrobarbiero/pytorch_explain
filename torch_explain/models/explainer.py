@@ -89,10 +89,10 @@ class MuExplainer(BaseExplainer):
         self.model_layers.append(ConceptAwareness(n_concepts, explainer_hidden[0], n_classes, n_heads=5))
         self.model_layers.append(torch.nn.LeakyReLU())
         self.model_layers.append(Dropout())
-        # for i in range(1, len(explainer_hidden)):
-        #     self.model_layers.append(ConceptAwareness(explainer_hidden[i - 1], explainer_hidden[i], n_classes))
-        #     self.model_layers.append(torch.nn.LeakyReLU())
-        #     self.model_layers.append(Dropout())
+        for i in range(1, len(explainer_hidden)):
+            self.model_layers.append(ConceptAwareness(explainer_hidden[i - 1], explainer_hidden[i], n_classes))
+            self.model_layers.append(torch.nn.LeakyReLU())
+            self.model_layers.append(Dropout())
 
         self.model_layers.append(ConceptAwareness(explainer_hidden[-1], 1, n_classes, top=True))
         self.model_layers.append(torch.nn.LogSoftmax(dim=1))

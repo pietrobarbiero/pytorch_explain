@@ -34,7 +34,7 @@ def load_mimic():
     f2.append('day_icu_intime')
     f2.append('service_unit')
     f2.append('day_28_flg')
-    # f2.append('hospital_los_day')
+    f2.append('hospital_los_day')
     f2.append('icu_exp_flg')
     f2.append('hosp_exp_flg')
     f2.append('censor_flg')
@@ -60,10 +60,12 @@ def load_mimic():
     datax = np.hstack((data1, data2d))
     # datay = data['day_28_flg'].values
     # datay = (data['hospital_los_day']>6).values
-    datay = data['hosp_exp_flg'].values
+    # datay = data['hosp_exp_flg'].values
+
+    datay = (data['day_28_flg'].values + data['hosp_exp_flg'].values + data['icu_exp_flg'].values + (1-data['censor_flg'].values)) > 0
 
     # model = DecisionTreeClassifier()
-    # model = RandomForestClassifier()
+    # # model = RandomForestClassifier()
     # scores = cross_val_score(model, datax, datay, cv=10)
     # print(scores.mean())
 

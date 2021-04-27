@@ -51,6 +51,7 @@ def explain_class(model: torch.nn.Module, x: torch.Tensor, y: torch.Tensor,
                         continue
 
                     local_explanations = []
+                    local_explanations_accuracies = []
                     local_explanations_raw = {}
 
                     if module.top:
@@ -73,7 +74,7 @@ def explain_class(model: torch.nn.Module, x: torch.Tensor, y: torch.Tensor,
                             local_explanations_raw[local_explanation_raw] = local_explanation_raw
                             local_explanations.append(local_explanation)
 
-                    aggregated_explanation = _aggregate_explanations(local_explanations, topk_explanations)
+                    aggregated_explanation = _aggregate_explanations(local_explanations, topk_explanations, sum(y_validation[:, target_class]))
 
                     explanations.append(f'{aggregated_explanation}')
                     class_explanations[f'layer_{layer_id}-neuron_{neuron}'] = str(aggregated_explanation)
@@ -120,7 +121,7 @@ def _simplify_formula(explanation: str, x: torch.Tensor, y: torch.Tensor, target
     return explanation
 
 
-def _aggregate_explanations(local_explanations, topk_explanations):
+def _aggregate_explanations(local_explanations, topk_explanations, max_support):
     if len(local_explanations) == 0:
         return ''
 
@@ -131,8 +132,13 @@ def _aggregate_explanations(local_explanations, topk_explanations):
         if len(counter) < topk_explanations:
             topk = len(counter)
         most_common_explanations = []
-        for explanation, _ in counter.most_common(topk):
+        # max_support = 0.7
+        aggregated_support = 0
+        for explanation, support in counter.most_common(topk):
             most_common_explanations.append(f'({explanation})')
+            aggregated_support += support
+            if aggregated_support >= 0.8 * max_support:
+                break
 
         # aggregate example-level explanations
         if local_explanations:

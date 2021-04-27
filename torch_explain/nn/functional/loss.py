@@ -16,13 +16,9 @@ def concept_awareness_loss(model: torch.nn.Module):
     loss = 0
     for module in model.children():
         if isinstance(module, ConceptAwareness) and module.shrink:
-            # loss += torch.norm(module.gamma, 1)
-            # loss += torch.norm(module.weight, 1)
-            # loss += torch.norm(module.beta, 1)
-            # loss -= torch.sum(module.alpha.squeeze() * torch.log(module.alpha.squeeze()))
-            for alphas in module.alpha:
-                loss -= torch.sum(alphas * torch.log(alphas))
-            # loss += torch.norm(module.alpha.squeeze(), p=1)
+            for alpha in module.alpha:
+                loss -= torch.sum(alpha * torch.log(alpha))
+            # loss += torch.norm(module.beta.squeeze(), p=1) + 0.01 * torch.norm(module.weight, 2)
             break
     return loss
 

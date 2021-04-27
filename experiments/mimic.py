@@ -42,7 +42,7 @@ print(n_concepts)
 print(n_classes)
 
 # %%
-rmtree('./results/mimic-ii')
+rmtree('./results/mimic-ii', ignore_errors=True)
 seed_everything(42)
 
 n_splits = 10
@@ -72,7 +72,7 @@ for split, (trainval_index, test_index) in enumerate(
                       weights_save_path=base_dir, callbacks=[checkpoint_callback])
     model = MuExplainer(n_concepts=n_concepts, n_classes=n_classes,
                         l1=0.01,
-                        explainer_hidden=[10],
+                        explainer_hidden=[100],
                         lr=0.01)
 
     path = glob.glob(f'{base_dir}/*.ckpt')
@@ -82,9 +82,11 @@ for split, (trainval_index, test_index) in enumerate(
     model.freeze()
     model_results = trainer.test(model, test_dataloaders=test_loader)
     results, results_full = model.explain_class(val_loader, test_loader,
-                                                topk_explanations=1, max_minterm_complexity=3,
+                                                topk_explanations=1,
+                                                max_minterm_complexity=10,
                                                 concept_names=concept_names)
     results['model_accuracy'] = model_results[0]['test_acc']
+    print(results_full)
     print(f"Explanation: {results_full[0]['explanation']}")
     print(f"Explanation: {results_full[0]['explanation_accuracy']}")
     print(f"Explanation: {results_full[1]['explanation']}")
@@ -94,15 +96,14 @@ for split, (trainval_index, test_index) in enumerate(
     plt.subplot(1, 2, 1)
     plt.title(f'Alpha - {results["model_accuracy"]:.4f}')
     # sns.heatmap(model.model[0].weight[0].abs())
-    sns.histplot(model.model[0].alpha[0])
+    sns.distplot(model.model[0].beta[0])
     plt.subplot(1, 2, 2)
     plt.title(f'Alpha - {results["model_accuracy"]:.4f}')
     # sns.heatmap(model.model[0].weight[1].abs())
-    sns.histplot(model.model[0].alpha[1])
+    sns.distplot(model.model[0].alpha[1])
     plt.tight_layout()
-    # plt.savefig('./results/mimic-ii/l1_gamma.png')
-    # plt.savefig('./results/mimic-ii/l1_weight.png')
-    # plt.savefig('./results/mimic-ii/l1_beta.png')
+    plt.savefig(f'./results/mimic-ii/l1_alpha_{split}.png')
+    plt.savefig(f'./results/mimic-ii/l1_alpha_{split}.pdf')
     plt.show()
     #
     # sys.exit()
