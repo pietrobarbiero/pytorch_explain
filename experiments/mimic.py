@@ -72,7 +72,7 @@ for split, (trainval_index, test_index) in enumerate(
                       weights_save_path=base_dir, callbacks=[checkpoint_callback])
     model = MuExplainer(n_concepts=n_concepts, n_classes=n_classes,
                         l1=0.01,
-                        explainer_hidden=[100],
+                        explainer_hidden=[100, 100],
                         lr=0.01)
 
     path = glob.glob(f'{base_dir}/*.ckpt')
@@ -83,7 +83,7 @@ for split, (trainval_index, test_index) in enumerate(
     model_results = trainer.test(model, test_dataloaders=test_loader)
     results, results_full = model.explain_class(val_loader, test_loader,
                                                 topk_explanations=1,
-                                                max_minterm_complexity=10,
+                                                max_minterm_complexity=1,
                                                 concept_names=concept_names)
     results['model_accuracy'] = model_results[0]['test_acc']
     print(results_full)
