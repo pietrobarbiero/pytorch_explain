@@ -18,12 +18,12 @@ from torch_explain.logic.nn import explain_class
 from torch_explain.logic.metrics import test_explanation, complexity
 from torch_explain.models.base import task_accuracy, BaseClassifier, concept_accuracy
 from torch_explain.nn import Conceptizator
-from torch_explain.nn.functional import l1_loss, concept_awareness_loss
-from torch_explain.nn.logic import ConceptAwareness
+from torch_explain.nn.functional import l1_loss, concept_aware_loss
+from torch_explain.nn.logic import ConceptAware, LinearIndependent
 
 
 class BaseExplainer(BaseClassifier):
-    def __init__(self, n_concepts: int, n_classes: int, optimizer: str = 'adamw', loss: _Loss = nn.BCEWithLogitsLoss(),
+    def __init__(self, n_concepts: int, n_classes: int, optimizer: str = 'adamw', loss: _Loss = nn.NLLLoss(),
                  lr: float = 1e-2, activation: callable = F.log_softmax, accuracy_score: callable = concept_accuracy,
                  explainer_hidden: list = (10, 10), l1: float = 1e-5):
         super().__init__(n_classes, optimizer, loss, lr, activation, accuracy_score)
@@ -41,9 +41,9 @@ class BaseExplainer(BaseClassifier):
         x, y = batch
         y_out = self.forward(x)
         if self.loss.__class__.__name__ == 'NLLLoss':
-            loss = self.loss(y_out, y.argmax(dim=1)) + self.l1 * concept_awareness_loss(self.model) #+ 0.00001 * l1_loss(self.model)
+            loss = self.loss(y_out, y.argmax(dim=1)) + self.l1 * concept_aware_loss(self.model) #+ 0.00001 * l1_loss(self.model)
         else:
-            loss = self.loss(y_out, y) + self.l1 * concept_awareness_loss(self.model) #+ 0.00001 * l1_loss(self.model)
+            loss = self.loss(y_out, y) + self.l1 * concept_aware_loss(self.model) #+ 0.00001 * l1_loss(self.model)
         accuracy = self.accuracy_score(y_out, y)
         self.log('train_loss', loss, on_step=True, on_epoch=True, prog_bar=True)
         self.log('train_acc', accuracy, on_step=True, on_epoch=True, prog_bar=True)
@@ -53,9 +53,9 @@ class BaseExplainer(BaseClassifier):
         x, y = batch
         y_out = self.forward(x)
         if self.loss.__class__.__name__ == 'NLLLoss':
-            loss = self.loss(y_out, y.argmax(dim=1)) + self.l1 * concept_awareness_loss(self.model) #+ 0.00001 * l1_loss(self.model)
+            loss = self.loss(y_out, y.argmax(dim=1)) + self.l1 * concept_aware_loss(self.model) #+ 0.00001 * l1_loss(self.model)
         else:
-            loss = self.loss(y_out, y) + self.l1 * concept_awareness_loss(self.model) #+ 0.00001 * l1_loss(self.model)
+            loss = self.loss(y_out, y) + self.l1 * concept_aware_loss(self.model) #+ 0.00001 * l1_loss(self.model)
         accuracy = self.accuracy_score(y_out, y)
         self.log('val_loss', loss, on_step=True, on_epoch=True, prog_bar=True)
         self.log('val_acc', accuracy, on_step=True, on_epoch=True, prog_bar=True)
@@ -78,23 +78,22 @@ class BaseExplainer(BaseClassifier):
 
 
 class MuExplainer(BaseExplainer):
-    def __init__(self, n_concepts: int, n_classes: int, optimizer: str = 'adamw',
-                 loss: _Loss = nn.NLLLoss(),
+    def __init__(self, n_concepts: int, n_classes: int, optimizer: str = 'adamw', loss: _Loss = nn.NLLLoss(),
                  lr: float = 1e-2, activation: callable = F.log_softmax, accuracy_score: callable = task_accuracy,
-                 explainer_hidden: list = (8, 3), l1: float = 1e-5):
+                 explainer_hidden: list = (8, 3), l1: float = 1e-5, awareness: str = 'l1'):
         super().__init__(n_concepts, n_classes, optimizer, loss, lr, activation,
                          accuracy_score, explainer_hidden, l1)
 
         self.model_layers = []
-        self.model_layers.append(ConceptAwareness(n_concepts, explainer_hidden[0], n_classes, n_heads=5))
+        self.model_layers.append(ConceptAware(n_concepts, explainer_hidden[0], n_classes, awareness=awareness))
         self.model_layers.append(torch.nn.LeakyReLU())
         self.model_layers.append(Dropout())
         for i in range(1, len(explainer_hidden)):
-            self.model_layers.append(ConceptAwareness(explainer_hidden[i - 1], explainer_hidden[i], n_classes))
+            self.model_layers.append(LinearIndependent(explainer_hidden[i - 1], explainer_hidden[i], n_classes))
             self.model_layers.append(torch.nn.LeakyReLU())
             self.model_layers.append(Dropout())
 
-        self.model_layers.append(ConceptAwareness(explainer_hidden[-1], 1, n_classes, top=True))
+        self.model_layers.append(LinearIndependent(explainer_hidden[-1], 1, n_classes, top=True))
         self.model_layers.append(torch.nn.LogSoftmax(dim=1))
 
         self.model = torch.nn.Sequential(*self.model_layers)
@@ -164,14 +163,14 @@ class MuExplainer(BaseExplainer):
     # def inspect(self, dataloader):
     #     x, y_out, y_1h = self.transform(dataloader, y_to_one_hot=False)
     #     h_prev = x
-    #     n_layers = len([1 for module in self.model.modules() if isinstance(module, ConceptAwareness)])-1
+    #     n_layers = len([1 for module in self.model.modules() if isinstance(module, ConceptAware)])-1
     #     layer_id = 1
     #     plt.figure(figsize=[10, 4])
     #     for module in self.model.modules():
     #         if isinstance(module, nn.Sequential) or isinstance(module, Conceptizator):
     #             continue
     #         h = module(h_prev)
-    #         if isinstance(module, ConceptAwareness) and not module.top:
+    #         if isinstance(module, ConceptAware) and not module.top:
     #             plt.subplot(1, n_layers, layer_id)
     #             plt.title(f'Layer {layer_id}')
     #             sns.scatterplot(x=h_prev.view(-1), y=module.conceptizator.concepts.view(-1))

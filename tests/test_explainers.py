@@ -42,14 +42,15 @@ class TestTemplateObject(unittest.TestCase):
                           weights_save_path=base_dir, profiler="simple",
                           callbacks=[checkpoint_callback])
 
-        model = MuExplainer(n_concepts=12, n_classes=2, l1=0.01, lr=0.01, explainer_hidden=[10, 10])
+        model = MuExplainer(n_concepts=12, n_classes=2, l1=0.00001, lr=0.01, explainer_hidden=[10, 10])
         trainer.fit(model, val_loader, val_loader)
 
         model.freeze()
         trainer.test(model, test_dataloaders=test_loader)
-        results, results_full = model.explain_class(val_loader, test_loader,
-                                                    topk_explanations=100, max_minterm_complexity=10)
+        results, results_full = model.explain_class(val_loader, test_loader, topk_explanations=20)
         print(results)
+        print(results_full[0]['explanation'])
+        print(model.model[0].gamma)
         assert results_full[0]['explanation'] == '(feature0000000000 & ~feature0000000001 & ~feature0000000002 & ~feature0000000003 & ~feature0000000004 & ~feature0000000005 & ~feature0000000006 & ~feature0000000007 & ~feature0000000008 & ~feature0000000009) | (feature0000000002 & ~feature0000000000 & ~feature0000000001 & ~feature0000000003 & ~feature0000000004 & ~feature0000000005 & ~feature0000000006 & ~feature0000000007 & ~feature0000000008 & ~feature0000000009) | (feature0000000004 & ~feature0000000000 & ~feature0000000001 & ~feature0000000002 & ~feature0000000003 & ~feature0000000005 & ~feature0000000006 & ~feature0000000007 & ~feature0000000008 & ~feature0000000009) | (feature0000000006 & ~feature0000000000 & ~feature0000000001 & ~feature0000000002 & ~feature0000000003 & ~feature0000000004 & ~feature0000000005 & ~feature0000000007 & ~feature0000000008 & ~feature0000000009) | (feature0000000008 & ~feature0000000000 & ~feature0000000001 & ~feature0000000002 & ~feature0000000003 & ~feature0000000004 & ~feature0000000005 & ~feature0000000006 & ~feature0000000007 & ~feature0000000009)'
 
 

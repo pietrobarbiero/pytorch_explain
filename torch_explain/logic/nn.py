@@ -60,7 +60,7 @@ def explain_class(model: torch.nn.Module, x: torch.Tensor, y: torch.Tensor,
                         y_target = module.conceptizator.concepts[:, neuron] > module.conceptizator.threshold
 
                     neuron_list = torch.nonzero(y_target)
-                    for i in neuron_list:
+                    for j, i in enumerate(neuron_list):
                         # simplify = True if module.top else False
                         simplify = False
                         local_explanation, local_explanation_raw = _local_explanation(prev_module, feature_names, i,
@@ -137,8 +137,8 @@ def _aggregate_explanations(local_explanations, topk_explanations, max_support):
         for explanation, support in counter.most_common(topk):
             most_common_explanations.append(f'({explanation})')
             aggregated_support += support
-            if aggregated_support >= 0.8 * max_support:
-                break
+            # if aggregated_support >= 0.8 * max_support:
+            #     break
 
         # aggregate example-level explanations
         if local_explanations:
