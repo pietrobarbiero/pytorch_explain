@@ -1,10 +1,11 @@
-from .logic import ConceptAwareness
+from .logic import ConceptAware, LinearIndependent
 from .concepts import Conv2Concepts, Conceptizator
 from . import functional
 
 __all__ = [
     'functional',
-    'ConceptAwareness',
+    'ConceptAware',
+    'LinearIndependent',
     'Conv2Concepts',
     'Conceptizator',
 ]

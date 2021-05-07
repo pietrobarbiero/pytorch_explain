@@ -1,25 +1,25 @@
 import torch
 
-from torch_explain.nn.logic import ConceptAwareness
+from torch_explain.nn.logic import ConceptAware
+
+
+def concept_aware_loss(model: torch.nn.Module):
+    loss = 0
+    for module in model.children():
+        if isinstance(module, ConceptAware):
+            if module.awareness == 'entropy':
+                loss -= torch.sum(module.alpha * torch.log(module.alpha))
+            elif module.awareness == 'l1':
+                loss += torch.norm(module.gamma, 1)
+            break
+    return loss
 
 
 def l1_loss(model: torch.nn.Module):
     loss = 0
     for module in model.children():
-        if isinstance(module, ConceptAwareness) and module.shrink:
+        if isinstance(module, ConceptAware):
             loss += torch.norm(module.weight, 1)
-            break
-    return loss
-
-
-def concept_awareness_loss(model: torch.nn.Module):
-    loss = 0
-    for module in model.children():
-        if isinstance(module, ConceptAwareness) and module.shrink:
-            for alpha in module.alpha:
-                loss -= torch.sum(alpha * torch.log(alpha))
-            # loss += torch.norm(module.beta.squeeze(), p=1) + 0.01 * torch.norm(module.weight, 2)
-            loss += 0.1 * torch.norm(module.weight, 1)
             break
     return loss
 
@@ -28,7 +28,7 @@ def whitening_loss(model: torch.nn.Module, device: torch.device = torch.device('
     loss = 0
     cov = None
     for module in model.children():
-        if isinstance(module, ConceptAwareness):
+        if isinstance(module, ConceptAware):
             # the target covariance matrix is diagonal
             n_concepts = module.conceptizator.concepts.shape[1]
             cov_objective = torch.eye(n_concepts).to(device)

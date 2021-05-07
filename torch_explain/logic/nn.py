@@ -9,7 +9,7 @@ from sympy import simplify_logic
 
 from torch_explain.logic.metrics import test_explanation
 from torch_explain.logic.utils import replace_names
-from torch_explain.nn.logic import ConceptAwareness
+from torch_explain.nn.logic import ConceptAware, LinearIndependent
 
 
 def explain_class(model: torch.nn.Module, x: torch.Tensor, y: torch.Tensor,
@@ -35,7 +35,7 @@ def explain_class(model: torch.nn.Module, x: torch.Tensor, y: torch.Tensor,
     is_first = True
     for layer_id, module in enumerate(model.children()):
         # analyze only logic layers
-        if isinstance(module, ConceptAwareness):  # or isinstance(module, XLogicConv2d):
+        if isinstance(module, ConceptAware) or isinstance(module, LinearIndependent):
 
             if is_first:
                 prev_module = module
@@ -154,12 +154,12 @@ def _local_explanation(prev_module, feature_names, neuron_id, neuron_explanation
                        c_validation, y_target, target_class, simplify, max_accuracy, max_minterm_complexity):
     # explanation is the conjunction of non-pruned features
     explanation_raw = ''
-    non_pruned_neurons = prev_module.beta[target_class]
+    non_pruned_neurons = prev_module.gamma[target_class]
     if max_minterm_complexity:
         neurons_to_retain = torch.argsort(non_pruned_neurons, descending=True)[:max_minterm_complexity]
     else:
-        neurons_to_retain_idx = prev_module.beta[target_class] > 0.5
-        neurons_sorted = torch.argsort(prev_module.beta[target_class])
+        neurons_to_retain_idx = prev_module.gamma[target_class] > 0.5
+        neurons_sorted = torch.argsort(prev_module.gamma[target_class])
         neurons_to_retain = neurons_sorted[neurons_to_retain_idx[neurons_sorted]]
     for j in neurons_to_retain:
         if feature_names[j] not in ['()', '']:

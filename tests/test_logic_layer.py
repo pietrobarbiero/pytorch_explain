@@ -24,11 +24,11 @@ class TestTemplateObject(unittest.TestCase):
             y = torch.tensor([0, 1, 1, 0], dtype=torch.long)
 
             layers = [
-                te.nn.ConceptAwareness(2, 10, n_classes=2, n_heads=1),
+                te.nn.ConceptAware(2, 10, n_classes=2, awareness='entropy'),
                 torch.nn.LeakyReLU(),
-                te.nn.ConceptAwareness(10, 10, n_classes=2),
+                te.nn.LinearIndependent(10, 10, n_classes=2),
                 torch.nn.LeakyReLU(),
-                te.nn.ConceptAwareness(10, 1, n_classes=2, top=True),
+                te.nn.LinearIndependent(10, 1, n_classes=2, top=True),
                 torch.nn.LogSoftmax(dim=1)
             ]
             model = torch.nn.Sequential(*layers)
@@ -39,7 +39,7 @@ class TestTemplateObject(unittest.TestCase):
             for epoch in range(61):
                 optimizer.zero_grad()
                 y_pred = model(x)
-                loss = loss_form(y_pred, y) #+ 0.0001 * te.nn.functional.l1_loss(model)
+                loss = loss_form(y_pred, y) + 0.0001 * te.nn.functional.concept_aware_loss(model)
 
                 loss.backward()
                 optimizer.step()
@@ -48,6 +48,8 @@ class TestTemplateObject(unittest.TestCase):
                 if epoch % 10 == 0:
                     accuracy = y_pred.argmax(dim=1).eq(y).sum().item() / y.size(0)
                     print(f'Epoch {epoch}: loss {loss:.4f} train accuracy: {accuracy:.4f}')
+
+            print(model[0].gamma)
 
             y1h = one_hot(y)
             class_explanation, class_explanations, _ = explain_class(model, x, y1h, target_class=0)
@@ -64,25 +66,27 @@ class TestTemplateObject(unittest.TestCase):
 
         return
 
-    def test_explain_class_binary_pruning(self):
+    def test_explain_class_binary_l1(self):
         for i in range(20):
             seed_everything(i)
 
             # Problem 1
+            x0 = torch.zeros((4, 100))
             x = torch.tensor([
                 [0, 0, 0],
                 [0, 1, 0],
                 [1, 0, 0],
                 [1, 1, 0],
             ], dtype=torch.float)
+            x = torch.cat([x, x0], dim=1)
             y = torch.tensor([0, 1, 1, 0], dtype=torch.long)
 
             layers = [
-                te.nn.ConceptAwareness(3, 10, n_classes=2, n_heads=1),
+                te.nn.ConceptAware(x.shape[1], 10, n_classes=2, awareness='l1'),
                 torch.nn.LeakyReLU(),
-                te.nn.ConceptAwareness(10, 10, n_classes=2),
+                te.nn.LinearIndependent(10, 10, n_classes=2),
                 torch.nn.LeakyReLU(),
-                te.nn.ConceptAwareness(10, 1, n_classes=2, top=True),
+                te.nn.LinearIndependent(10, 1, n_classes=2, top=True),
                 torch.nn.LogSoftmax(dim=1)
             ]
             model = torch.nn.Sequential(*layers)
@@ -93,7 +97,7 @@ class TestTemplateObject(unittest.TestCase):
             for epoch in range(1001):
                 optimizer.zero_grad()
                 y_pred = model(x)
-                loss = loss_form(y_pred, y) + 0.00001 * te.nn.functional.l1_loss(model)
+                loss = loss_form(y_pred, y) + 0.00001 * te.nn.functional.concept_aware_loss(model)
 
                 loss.backward()
                 optimizer.step()
@@ -103,7 +107,63 @@ class TestTemplateObject(unittest.TestCase):
                     accuracy = y_pred.argmax(dim=1).eq(y).sum().item() / y.size(0)
                     print(f'Epoch {epoch}: loss {loss:.4f} train accuracy: {accuracy:.4f}')
 
-            print(model[0].beta)
+            print(model[0].gamma)
+
+            y1h = one_hot(y)
+            class_explanation, class_explanations, _ = explain_class(model, x, y1h, target_class=0)
+            print(class_explanation)
+            print(class_explanations)
+            assert class_explanation == '(feature0000000000 & feature0000000001) | (~feature0000000000 & ~feature0000000001)'
+
+            class_explanation, class_explanations, _ = explain_class(model, x, y1h, target_class=1)
+            print(class_explanation)
+            print(class_explanations)
+            assert class_explanation == '(feature0000000000 & ~feature0000000001) | (feature0000000001 & ~feature0000000000)'
+
+        return
+
+    def test_explain_class_binary_entropy(self):
+        for i in range(20):
+            seed_everything(i)
+
+            # Problem 1
+            x0 = torch.zeros((4, 100))
+            x = torch.tensor([
+                [0, 0, 0],
+                [0, 1, 0],
+                [1, 0, 0],
+                [1, 1, 0],
+            ], dtype=torch.float)
+            # x = torch.cat([x, x0], dim=1)
+            y = torch.tensor([0, 1, 1, 0], dtype=torch.long)
+
+            layers = [
+                te.nn.ConceptAware(x.shape[1], 10, n_classes=2, awareness='entropy'),
+                torch.nn.LeakyReLU(),
+                te.nn.LinearIndependent(10, 10, n_classes=2),
+                torch.nn.LeakyReLU(),
+                te.nn.LinearIndependent(10, 1, n_classes=2, top=True),
+                torch.nn.LogSoftmax(dim=1)
+            ]
+            model = torch.nn.Sequential(*layers)
+
+            optimizer = torch.optim.AdamW(model.parameters(), lr=0.01)
+            loss_form = torch.nn.NLLLoss()
+            model.train()
+            for epoch in range(1001):
+                optimizer.zero_grad()
+                y_pred = model(x)
+                loss = loss_form(y_pred, y) + 0.00001 * te.nn.functional.concept_aware_loss(model)
+
+                loss.backward()
+                optimizer.step()
+
+                # compute accuracy
+                if epoch % 100 == 0:
+                    accuracy = y_pred.argmax(dim=1).eq(y).sum().item() / y.size(0)
+                    print(f'Epoch {epoch}: loss {loss:.4f} train accuracy: {accuracy:.4f}')
+
+            print(model[0].gamma)
 
             y1h = one_hot(y)
             class_explanation, class_explanations, _ = explain_class(model, x, y1h, target_class=0)
@@ -133,11 +193,11 @@ class TestTemplateObject(unittest.TestCase):
             y1h = one_hot(y).to(torch.float)
 
             layers = [
-                te.nn.ConceptAwareness(4, 10, n_classes=3, n_heads=1),
+                te.nn.ConceptAware(4, 10, n_classes=3, awareness='l1'),
                 torch.nn.LeakyReLU(),
-                te.nn.ConceptAwareness(10, 10, n_classes=3),
+                te.nn.LinearIndependent(10, 10, n_classes=3),
                 torch.nn.LeakyReLU(),
-                te.nn.ConceptAwareness(10, 1, n_classes=3, top=True),
+                te.nn.LinearIndependent(10, 1, n_classes=3, top=True),
                 torch.nn.Sigmoid()
             ]
             model = torch.nn.Sequential(*layers)
@@ -148,7 +208,7 @@ class TestTemplateObject(unittest.TestCase):
             for epoch in range(1001):
                 optimizer.zero_grad()
                 y_pred = model(x)
-                loss = loss_form(y_pred, y1h) + 0.0001 * te.nn.functional.l1_loss(model)
+                loss = loss_form(y_pred, y1h) + 0.0001 * te.nn.functional.concept_aware_loss(model)
 
                 loss.backward()
                 optimizer.step()
@@ -158,7 +218,7 @@ class TestTemplateObject(unittest.TestCase):
                     accuracy = y_pred.argmax(dim=1).eq(y).sum().item() / y.size(0)
                     print(f'Epoch {epoch}: loss {loss:.4f} train accuracy: {accuracy:.4f}')
 
-            print(model[0].beta)
+            print(model[0].gamma)
 
             class_explanation, class_explanations, _ = explain_class(model, x, y1h, target_class=0)
             print(class_explanation)
