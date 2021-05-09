@@ -63,11 +63,15 @@ def load_mimic():
     # datay = data['hosp_exp_flg'].values
 
     datay = (data['day_28_flg'].values + data['hosp_exp_flg'].values + data['icu_exp_flg'].values + (1-data['censor_flg'].values)) > 0
+    # datay = data['day_28_flg'].values
 
-    # model = DecisionTreeClassifier()
+    # model = DecisionTreeClassifier(max_depth=3)
     # # model = RandomForestClassifier()
     # scores = cross_val_score(model, datax, datay, cv=10)
     # print(scores.mean())
+
+    # datax = np.vstack((datax, datax[datay==1], datax[datay==1]))
+    # datay = np.hstack((datay, datay[datay==1], datay[datay==1]))
 
     x = torch.FloatTensor(datax)
     y = one_hot(torch.tensor(datay).to(torch.long)).to(torch.float)

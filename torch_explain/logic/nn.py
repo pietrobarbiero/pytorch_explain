@@ -51,7 +51,7 @@ def explain_class(model: torch.nn.Module, x: torch.Tensor, y: torch.Tensor,
                         continue
 
                     local_explanations = []
-                    local_explanations_accuracies = []
+                    local_explanations_accuracies = {}
                     local_explanations_raw = {}
 
                     if module.top:
@@ -70,11 +70,17 @@ def explain_class(model: torch.nn.Module, x: torch.Tensor, y: torch.Tensor,
                                                                                       max_accuracy,
                                                                                       max_minterm_complexity)
 
+                        if local_explanation_raw not in local_explanations_accuracies:
+                            accuracy, _ = test_explanation(local_explanation_raw, target_class,
+                                                           c_validation, y_target, metric=accuracy_score)
+                            local_explanations_accuracies[local_explanation_raw] = accuracy
+
                         if local_explanation and local_explanation_raw:
                             local_explanations_raw[local_explanation_raw] = local_explanation_raw
                             local_explanations.append(local_explanation)
 
-                    aggregated_explanation = _aggregate_explanations(local_explanations, topk_explanations, sum(y_validation[:, target_class]))
+                    aggregated_explanation = _aggregate_explanations(local_explanations_accuracies,
+                                                                     local_explanations_raw, topk_explanations)
 
                     explanations.append(f'{aggregated_explanation}')
                     class_explanations[f'layer_{layer_id}-neuron_{neuron}'] = str(aggregated_explanation)
@@ -121,28 +127,18 @@ def _simplify_formula(explanation: str, x: torch.Tensor, y: torch.Tensor, target
     return explanation
 
 
-def _aggregate_explanations(local_explanations, topk_explanations, max_support):
+def _aggregate_explanations(local_explanations_accuracy, local_explanations, topk_explanations):
     if len(local_explanations) == 0:
         return ''
 
     else:
-        # get most frequent local explanations
-        counter = collections.Counter(local_explanations)
-        topk = topk_explanations
-        if len(counter) < topk_explanations:
-            topk = len(counter)
-        most_common_explanations = []
-        # max_support = 0.7
-        aggregated_support = 0
-        for explanation, support in counter.most_common(topk):
-            most_common_explanations.append(f'({explanation})')
-            aggregated_support += support
-            # if aggregated_support >= 0.8 * max_support:
-            #     break
+        # get the topk most accurate local explanations
+        local_explanations_sorted = sorted(local_explanations_accuracy.items(), key=lambda x: x[1])[:topk_explanations]
+        best_explanations = [explanation for explanation, _ in local_explanations_sorted]
 
         # aggregate example-level explanations
         if local_explanations:
-            aggregated_explanation = ' | '.join(most_common_explanations)
+            aggregated_explanation = ' | '.join(best_explanations)
             aggregated_explanation_simplified = simplify_logic(aggregated_explanation, 'dnf', force=True)
             aggregated_explanation_simplified = f'({aggregated_explanation_simplified})'
         else:
