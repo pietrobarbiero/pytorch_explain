@@ -12,7 +12,7 @@ from torch_explain.logic.utils import replace_names
 from torch_explain.nn.logic import ConceptAware, LinearIndependent
 
 
-def explain_class(model: torch.nn.Module, x: torch.Tensor, y: torch.Tensor,
+def explain_class(model: torch.nn.Module, x, y, x_val: torch.Tensor, y_val: torch.Tensor,
                   target_class: int, max_minterm_complexity: int = None, topk_explanations: int = 3,
                   max_accuracy: bool = False, concept_names: List = None) -> str:
     """
@@ -26,6 +26,8 @@ def explain_class(model: torch.nn.Module, x: torch.Tensor, y: torch.Tensor,
     :param concept_names: list containing the names of the input concepts
     :return: Local explanation
     """
+    # x_val, y_val = _get_validation_data(x_val, y_val, model, target_class)
+    # y_val = y_val[:, target_class]
     x_validation, y_validation = _get_validation_data(x, y, model, target_class)
     if x_validation is None:
         return None, None, None
@@ -45,7 +47,7 @@ def explain_class(model: torch.nn.Module, x: torch.Tensor, y: torch.Tensor,
 
             elif module.top:
                 explanations = []
-                n_classes = module.conceptizator.concepts.size(0)
+                n_classes = y_val.shape[1]
                 for neuron in range(n_classes):
                     if module.top and neuron != target_class:
                         continue
@@ -56,13 +58,14 @@ def explain_class(model: torch.nn.Module, x: torch.Tensor, y: torch.Tensor,
 
                     if module.top:
                         y_target = module.conceptizator.concepts.argmax(dim=1).eq(target_class)
+                        y_val_target = y_val[:, target_class]
                     else:
                         y_target = module.conceptizator.concepts[:, neuron] > module.conceptizator.threshold
 
                     neuron_list = torch.nonzero(y_target)
                     for j, i in enumerate(neuron_list):
                         # simplify = True if module.top else False
-                        simplify = False
+                        simplify = True
                         local_explanation, local_explanation_raw = _local_explanation(prev_module, feature_names, i,
                                                                                       local_explanations_raw,
                                                                                       c_validation, y_target,
@@ -72,15 +75,18 @@ def explain_class(model: torch.nn.Module, x: torch.Tensor, y: torch.Tensor,
 
                         if local_explanation_raw not in local_explanations_accuracies:
                             accuracy, _ = test_explanation(local_explanation_raw, target_class,
-                                                           c_validation, y_target, metric=accuracy_score)
-                            local_explanations_accuracies[local_explanation_raw] = accuracy
+                                                           x_val, y_val_target, metric=accuracy_score)
+                            local_explanations_accuracies[local_explanation_raw] = (local_explanation, accuracy)
 
                         if local_explanation and local_explanation_raw:
                             local_explanations_raw[local_explanation_raw] = local_explanation_raw
                             local_explanations.append(local_explanation)
 
-                    aggregated_explanation = _aggregate_explanations(local_explanations_accuracies,
-                                                                     local_explanations_raw, topk_explanations)
+                    aggregated_explanation, best_acc = _aggregate_explanations(local_explanations_accuracies,
+                                                                               topk_explanations,
+                                                                               target_class, x_val, y_val_target)
+                    # accuracy, _ = test_explanation(aggregated_explanation, target_class, x_val, y_val_target, metric=accuracy_score)
+                    # print(accuracy, aggregated_explanation)
 
                     explanations.append(f'{aggregated_explanation}')
                     class_explanations[f'layer_{layer_id}-neuron_{neuron}'] = str(aggregated_explanation)
@@ -121,41 +127,53 @@ def _simplify_formula(explanation: str, x: torch.Tensor, y: torch.Tensor, target
 
         if explanation_simplified:
             accuracy, preds = test_explanation(explanation_simplified, target_class, x, y, metric=accuracy_score)
-            if (max_accuracy and accuracy == 1.) or (not max_accuracy and accuracy >= base_accuracy):
+            # if (max_accuracy and accuracy == 1.) or (not max_accuracy and accuracy >= base_accuracy):
+            if accuracy >= base_accuracy:
                 explanation = copy.deepcopy(explanation_simplified)
+                base_accuracy = accuracy
 
     return explanation
 
 
-def _aggregate_explanations(local_explanations_accuracy, local_explanations, topk_explanations):
-    if len(local_explanations) == 0:
+def _aggregate_explanations(local_explanations_accuracy, topk_explanations, target_class, x, y):
+    if len(local_explanations_accuracy) == 0:
         return ''
 
     else:
         # get the topk most accurate local explanations
-        local_explanations_sorted = sorted(local_explanations_accuracy.items(), key=lambda x: x[1])[:topk_explanations]
-        best_explanations = [explanation for explanation, _ in local_explanations_sorted]
+        local_explanations_sorted = sorted(local_explanations_accuracy.items(), key=lambda x: -x[1][1])[:topk_explanations]
+        explanations = []
+        best_accuracy = 0
+        best_explanation = ''
+        for explanation_raw, (explanation, accuracy) in local_explanations_sorted:
+            print(f'{explanation_raw} - {explanation} - {accuracy}')
+            explanations.append(explanation)
 
-        # aggregate example-level explanations
-        if local_explanations:
-            aggregated_explanation = ' | '.join(best_explanations)
+            # aggregate example-level explanations
+            aggregated_explanation = ' | '.join(explanations)
             aggregated_explanation_simplified = simplify_logic(aggregated_explanation, 'dnf', force=True)
             aggregated_explanation_simplified = f'({aggregated_explanation_simplified})'
-        else:
-            aggregated_explanation_simplified = ''
-    return aggregated_explanation_simplified
+
+            accuracy, _ = test_explanation(aggregated_explanation_simplified, target_class, x, y, metric=accuracy_score)
+            if accuracy > best_accuracy:
+                # print(accuracy, aggregated_explanation_simplified)
+                best_accuracy = accuracy
+                best_explanation = aggregated_explanation_simplified
+                explanations = [best_explanation]
+
+    return best_explanation, best_accuracy
 
 
 def _local_explanation(prev_module, feature_names, neuron_id, neuron_explanations_raw,
                        c_validation, y_target, target_class, simplify, max_accuracy, max_minterm_complexity):
     # explanation is the conjunction of non-pruned features
     explanation_raw = ''
-    non_pruned_neurons = prev_module.gamma[target_class]
+    non_pruned_neurons = prev_module.concept_mask[target_class]
     if max_minterm_complexity:
         neurons_to_retain = torch.argsort(non_pruned_neurons, descending=True)[:max_minterm_complexity]
     else:
-        neurons_to_retain_idx = prev_module.gamma[target_class] > 0.5
-        neurons_sorted = torch.argsort(prev_module.gamma[target_class])
+        neurons_to_retain_idx = prev_module.concept_mask[target_class] > 0.5
+        neurons_sorted = torch.argsort(prev_module.concept_mask[target_class])
         neurons_to_retain = neurons_sorted[neurons_to_retain_idx[neurons_sorted]]
     for j in neurons_to_retain:
         if feature_names[j] not in ['()', '']:

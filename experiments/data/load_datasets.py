@@ -175,6 +175,8 @@ def load_vDem(base_dir='./data'):
     data_mid = data_2000[mid_level_indicators] > 0.5
     data_high = data_2000[high_level_indicators].iloc[:, 0] > 0.5
 
+    data_mid = pd.DataFrame(np.hstack([data_low, data_mid]), columns=data_low.columns.append(data_mid.columns))
+
     # scores = cross_val_score(LogisticRegression(), data_mid.values, data_high.values, cv=10)
     # print(scores.mean())
     # scores = cross_val_score(DecisionTreeClassifier(), data_mid.values, data_high.values, cv=10)

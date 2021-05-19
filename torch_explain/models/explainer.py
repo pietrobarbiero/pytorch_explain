@@ -40,7 +40,7 @@ class BaseExplainer(BaseClassifier):
     def training_step(self, batch, batch_idx):
         x, y = batch
         y_out = self.forward(x)
-        if self.loss.__class__.__name__ == 'NLLLoss':
+        if self.loss.__class__.__name__ == 'CrossEntropyLoss':
             loss = self.loss(y_out, y.argmax(dim=1)) + self.l1 * concept_aware_loss(self.model) #+ 0.00001 * l1_loss(self.model)
         else:
             loss = self.loss(y_out, y) + self.l1 * concept_aware_loss(self.model) #+ 0.00001 * l1_loss(self.model)
@@ -52,7 +52,7 @@ class BaseExplainer(BaseClassifier):
     def validation_step(self, batch, batch_idx):
         x, y = batch
         y_out = self.forward(x)
-        if self.loss.__class__.__name__ == 'NLLLoss':
+        if self.loss.__class__.__name__ == 'CrossEntropyLoss':
             loss = self.loss(y_out, y.argmax(dim=1)) + self.l1 * concept_aware_loss(self.model) #+ 0.00001 * l1_loss(self.model)
         else:
             loss = self.loss(y_out, y) + self.l1 * concept_aware_loss(self.model) #+ 0.00001 * l1_loss(self.model)
@@ -78,14 +78,15 @@ class BaseExplainer(BaseClassifier):
 
 
 class MuExplainer(BaseExplainer):
-    def __init__(self, n_concepts: int, n_classes: int, optimizer: str = 'adamw', loss: _Loss = nn.NLLLoss(),
+    def __init__(self, n_concepts: int, n_classes: int, optimizer: str = 'adamw', loss: _Loss = nn.CrossEntropyLoss(),
                  lr: float = 1e-2, activation: callable = F.log_softmax, accuracy_score: callable = task_accuracy,
-                 explainer_hidden: list = (8, 3), l1: float = 1e-5, awareness: str = 'l1'):
+                 explainer_hidden: list = (8, 3), l1: float = 1e-5, temperature: float = 0.6, awareness: str = 'l1'):
         super().__init__(n_concepts, n_classes, optimizer, loss, lr, activation,
                          accuracy_score, explainer_hidden, l1)
 
+        self.temperature = temperature
         self.model_layers = []
-        self.model_layers.append(ConceptAware(n_concepts, explainer_hidden[0], n_classes, awareness=awareness))
+        self.model_layers.append(ConceptAware(n_concepts, explainer_hidden[0], n_classes, temperature, awareness))
         self.model_layers.append(torch.nn.LeakyReLU())
         self.model_layers.append(Dropout())
         for i in range(1, len(explainer_hidden)):
@@ -94,7 +95,7 @@ class MuExplainer(BaseExplainer):
             self.model_layers.append(Dropout())
 
         self.model_layers.append(LinearIndependent(explainer_hidden[-1], 1, n_classes, top=True))
-        self.model_layers.append(torch.nn.LogSoftmax(dim=1))
+        # self.model_layers.append(torch.nn.LogSoftmax(dim=1))
 
         self.model = torch.nn.Sequential(*self.model_layers)
 
@@ -115,11 +116,12 @@ class MuExplainer(BaseExplainer):
         #     y = F.one_hot(y)
         return x, y_out, y
 
-    def explain_class(self, val_dataloaders: DataLoader, test_dataloaders: DataLoader,
+    def explain_class(self, train_dataloaders: DataLoader, val_dataloaders: DataLoader, test_dataloaders: DataLoader,
                       target_class: Union[int, str] = 'all', concept_names: List = None,
                       topk_explanations: int = 3, max_minterm_complexity: int = None,
                       max_accuracy: bool = False, x_to_bool: bool = True, y_to_one_hot: bool = False):
 
+        x_train, y_train_out, y_train_1h = self.transform(train_dataloaders)
         x_val, y_val_out, y_val_1h = self.transform(val_dataloaders)
         x_test, y_test_out, y_test_1h = self.transform(test_dataloaders)
 
@@ -131,7 +133,9 @@ class MuExplainer(BaseExplainer):
         result_list = []
         exp_accuracy, exp_fidelity, exp_complexity = [], [], []
         for target_class in target_classes:
-            class_explanation, explanations, explanation_raw = explain_class(self.model.cpu(), x_val, y_val_1h,
+            class_explanation, explanations, explanation_raw = explain_class(self.model.cpu(),
+                                                                             x_train, y_train_1h,
+                                                                             x_val, y_val_1h,
                                                                              target_class=target_class,
                                                                              topk_explanations=topk_explanations,
                                                                              max_minterm_complexity=max_minterm_complexity,
@@ -139,8 +143,10 @@ class MuExplainer(BaseExplainer):
                                                                              max_accuracy=max_accuracy)
             accuracy, y_formula = test_explanation(explanation_raw, target_class=target_class,
                                                    x=x_test, y=y_test_1h[:, target_class])
+                                                   # x=x_val, y=y_val_1h[:, target_class])
             # explanation_fidelity = accuracy_score(y_test_out[:, target_class] > 0.5, y_formula)
             explanation_fidelity = accuracy_score(y_test_out.argmax(dim=1).eq(target_class), y_formula)
+            # explanation_fidelity = accuracy_score(y_val_out.argmax(dim=1).eq(target_class), y_formula)
             explanation_complexity = complexity(class_explanation)
             results = {
                 'target_class': target_class,

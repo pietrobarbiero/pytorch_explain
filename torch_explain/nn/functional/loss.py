@@ -10,7 +10,7 @@ def concept_aware_loss(model: torch.nn.Module):
             if module.awareness == 'entropy':
                 loss -= torch.sum(module.alpha * torch.log(module.alpha))
             elif module.awareness == 'l1':
-                loss += torch.norm(module.gamma, 1)
+                loss += torch.norm(module.alpha, 1)
             break
     return loss
 

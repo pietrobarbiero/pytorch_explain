@@ -11,11 +11,12 @@ class ConceptAware(nn.Module):
     """Applies a linear transformation to the incoming data: :math:`y = xA^T + b`
     """
 
-    def __init__(self, in_features: int, out_features: int, n_classes: int,
+    def __init__(self, in_features: int, out_features: int, n_classes: int, temperature: float = 0.6,
                  awareness: str = 'l1', bias: bool = True) -> None:
         super(ConceptAware, self).__init__()
         self.n_classes = n_classes
         self.awareness = awareness
+        self.temperature = temperature
         self.conceptizator = Conceptizator('identity_bool')
         self.alpha = None
         self.gamma = None
@@ -39,12 +40,23 @@ class ConceptAware(nn.Module):
         self.conceptizator.concepts = input
         # compute concept-awareness scores
         if self.awareness == 'entropy':
-            self.alpha = torch.softmax(self.weight.norm(dim=1, p=1), dim=1)
+            # self.alpha = torch.softmax(self.weight.norm(dim=1, p=1), dim=1)
+            gamma = self.weight.norm(dim=1, p=1)
+            self.alpha = torch.exp(gamma/self.temperature) / torch.sum(torch.exp(gamma/self.temperature), dim=1, keepdim=True)
         elif self.awareness == 'l1':
             self.alpha = torch.sigmoid(torch.log(self.weight.norm(dim=1, p=1)))
+
         # weight the input concepts by awareness scores
-        self.gamma = self.alpha / self.alpha.max(dim=1)[0].unsqueeze(1)
-        x = input.multiply(self.gamma.unsqueeze(1))
+        alpha_norm = self.alpha / self.alpha.max(dim=1)[0].unsqueeze(1)
+        self.concept_mask = alpha_norm > 0.5
+        x = input.multiply(alpha_norm.unsqueeze(1))
+
+        # x = input
+        # self.concept_mask = self.alpha >= self.alpha.topk(self.max_complexity)[0][:, -1].unsqueeze(1)
+        # # x = input.repeat(2, 1, 1).permute(0, 2, 1)
+        # # x[~self.concept_mask] = 0
+        # # x = x.permute(0, 2, 1)
+
         # compute linear map
         x = x.matmul(self.weight.permute(0, 2, 1)) + self.bias
         return x
