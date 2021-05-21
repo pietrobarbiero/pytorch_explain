@@ -2,7 +2,7 @@ from abc import abstractmethod
 from typing import List, Union
 
 import torch
-from sklearn.metrics import accuracy_score
+from sklearn.metrics import accuracy_score, f1_score
 from torch import nn
 import torch.nn.functional as F
 from torch.nn import Dropout
@@ -125,6 +125,8 @@ class MuExplainer(BaseExplainer):
         x_val, y_val_out, y_val_1h = self.transform(val_dataloaders)
         x_test, y_test_out, y_test_1h = self.transform(test_dataloaders)
 
+        # model_accuracy = f1_score(y_test_1h.argmax(dim=1), y_test_out.argmax(dim=1))
+
         if target_class == 'all':
             target_classes = [i for i in range(y_test_1h.size(1))]
         else:
@@ -141,8 +143,8 @@ class MuExplainer(BaseExplainer):
                                                                              max_minterm_complexity=max_minterm_complexity,
                                                                              concept_names=concept_names,
                                                                              max_accuracy=max_accuracy)
-            accuracy, y_formula = test_explanation(explanation_raw, target_class=target_class,
-                                                   x=x_test, y=y_test_1h[:, target_class])
+            explanation_accuracy, y_formula = test_explanation(explanation_raw, target_class=target_class,
+                                                   x=x_test, y=y_test_1h[:, target_class], metric=f1_score)
                                                    # x=x_val, y=y_val_1h[:, target_class])
             # explanation_fidelity = accuracy_score(y_test_out[:, target_class] > 0.5, y_formula)
             explanation_fidelity = accuracy_score(y_test_out.argmax(dim=1).eq(target_class), y_formula)
@@ -151,18 +153,19 @@ class MuExplainer(BaseExplainer):
             results = {
                 'target_class': target_class,
                 'explanation': class_explanation,
-                'explanation_accuracy': accuracy,
+                'explanation_accuracy': explanation_accuracy,
                 'explanation_fidelity': explanation_fidelity,
                 'explanation_complexity': explanation_complexity,
             }
             result_list.append(results)
-            exp_accuracy.append(accuracy)
+            exp_accuracy.append(explanation_accuracy)
             exp_fidelity.append(explanation_fidelity)
             exp_complexity.append(explanation_complexity)
         avg_results = {
             'explanation_accuracy': np.mean(exp_accuracy),
             'explanation_fidelity': np.mean(exp_fidelity),
             'explanation_complexity': np.mean(exp_complexity),
+            # 'model_accuracy': model_accuracy,
         }
         return avg_results, result_list
 
