@@ -146,7 +146,7 @@ def _aggregate_explanations(local_explanations_accuracy, topk_explanations, targ
         best_accuracy = 0
         best_explanation = ''
         for explanation_raw, (explanation, accuracy) in local_explanations_sorted:
-            print(f'{explanation_raw} - {explanation} - {accuracy}')
+            # print(f'{explanation_raw} - {explanation} - {accuracy}')
             explanations.append(explanation)
 
             # aggregate example-level explanations
@@ -154,6 +154,8 @@ def _aggregate_explanations(local_explanations_accuracy, topk_explanations, targ
             aggregated_explanation_simplified = simplify_logic(aggregated_explanation, 'dnf', force=True)
             aggregated_explanation_simplified = f'({aggregated_explanation_simplified})'
 
+            if aggregated_explanation_simplified in ['', 'False', 'True', '(False)', '(True)']:
+                continue
             accuracy, _ = test_explanation(aggregated_explanation_simplified, target_class, x, y, metric=accuracy_score)
             if accuracy > best_accuracy:
                 # print(accuracy, aggregated_explanation_simplified)
