@@ -206,6 +206,17 @@ def load_mnist(base_dir='./data'):
     return train_data, val_data, test_data, concept_names
 
 
+def load_cub(base_dir='./data'):
+    train_data = pd.read_csv(os.path.join(base_dir, 'CUB/cub200.csv'))
+    x = train_data.iloc[:, :-1].values
+    y = train_data.iloc[:, -1].values
+    concept_names = [f'feature{i:03}' for i in range(x.shape[1])]
+
+    x = torch.FloatTensor(x)
+    y = one_hot(torch.tensor(y).to(torch.long)).to(torch.float)
+    return x, y, concept_names
+
+
 if __name__ == '__main__':
     x, y, c = load_vDem('.')
     # x, y, c = load_celldiff('.')
