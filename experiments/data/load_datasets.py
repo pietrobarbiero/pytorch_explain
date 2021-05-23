@@ -1,3 +1,4 @@
+import os
 import pandas as pd
 import numpy as np
 import torch
@@ -188,6 +189,21 @@ def load_vDem(base_dir='./data'):
     c = torch.FloatTensor(data_mid.values)
     y = one_hot(torch.tensor(data_high.values).to(torch.long)).to(torch.float)
     return x, c, y, data_mid.columns
+
+
+def load_mnist(base_dir='./data'):
+    train_data = torch.load(os.path.join(base_dir, 'MNIST_X_to_C/c2y_training.pt'))
+    val_data = torch.load(os.path.join(base_dir, 'MNIST_X_to_C/c2y_validation.pt'))
+    test_data = torch.load(os.path.join(base_dir, 'MNIST_X_to_C/c2y_test.pt'))
+    train_data.tensors = ((train_data.tensors[0]).to(torch.float),
+                          (one_hot((train_data.tensors[1].argmax(dim=1) % 2 == 1).to(torch.long)).to(torch.float)))
+    val_data.tensors = ((val_data.tensors[0]).to(torch.float),
+                        (one_hot((val_data.tensors[1].argmax(dim=1) % 2 == 1).to(torch.long)).to(torch.float)))
+    test_data.tensors = ((test_data.tensors[0]).to(torch.float),
+                         (one_hot((test_data.tensors[1].argmax(dim=1) % 2 == 1).to(torch.long)).to(torch.float)))
+
+    concept_names = ['isZero', 'isOne', 'isTwo', 'isThree', 'isFour', 'isFive', 'isSix', 'isSeven', 'isEight', 'isNine']
+    return train_data, val_data, test_data, concept_names
 
 
 if __name__ == '__main__':
