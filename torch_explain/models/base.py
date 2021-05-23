@@ -19,13 +19,13 @@ class BaseClassifier(pl.LightningModule):
 
     def forward(self, x):
         x = self.model(x)
-        return self.activation(x)
+        return x
 
     def training_step(self, batch, batch_idx):
         x, y = batch
         y_out = self.forward(x)
         loss = self.loss(y_out, y)
-        accuracy = self.accuracy_score(y_out, y)
+        accuracy = self.accuracy_score(self.activation(y_out), y)
         self.log('train_loss', loss, on_step=True, on_epoch=True, prog_bar=True)
         self.log('train_acc', accuracy, on_step=True, on_epoch=True, prog_bar=True)
         return loss
@@ -34,7 +34,7 @@ class BaseClassifier(pl.LightningModule):
         x, y = batch
         y_out = self.forward(x)
         loss = self.loss(y_out, y)
-        accuracy = self.accuracy_score(y_out, y)
+        accuracy = self.accuracy_score(self.activation(y_out), y)
         self.log('val_loss', loss, on_step=True, on_epoch=True, prog_bar=True)
         self.log('val_acc', accuracy, on_step=True, on_epoch=True, prog_bar=True)
         return loss
@@ -43,7 +43,7 @@ class BaseClassifier(pl.LightningModule):
         x, y = batch
         y_out = self.forward(x)
         loss = self.loss(y_out, y)
-        accuracy = self.accuracy_score(y_out, y)
+        accuracy = self.accuracy_score(self.activation(y_out), y)
         self.log('test_acc', accuracy, on_step=True, on_epoch=True, prog_bar=True)
         return loss
 

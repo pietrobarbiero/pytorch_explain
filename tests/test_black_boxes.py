@@ -25,9 +25,10 @@ class TestTemplateObject(unittest.TestCase):
         ])
         dataset = MNIST_X_to_C('../experiments/data', train=True, download=True, transform=mnist_transforms)
         train_data, val_data, test_data = random_split(dataset, [50000, 5000, 5000])
-        train_loader = DataLoader(train_data, batch_size=180)
-        val_loader = DataLoader(val_data, batch_size=180)
-        test_loader = DataLoader(test_data, batch_size=180)
+        batch_size = 512
+        train_loader = DataLoader(train_data, batch_size=batch_size)
+        val_loader = DataLoader(val_data, batch_size=batch_size)
+        test_loader = DataLoader(test_data, batch_size=batch_size)
 
         # model
         base_dir = f'../experiments/results/MNIST/blackbox'
@@ -35,23 +36,23 @@ class TestTemplateObject(unittest.TestCase):
 
         # training
         checkpoint_callback = ModelCheckpoint(dirpath=base_dir, monitor='val_loss', save_top_k=1)
-        trainer = Trainer(max_epochs=5, gpus=1, auto_lr_find=True, deterministic=False,
+        trainer = Trainer(max_epochs=10, gpus=1, auto_lr_find=True, deterministic=False,
                           check_val_every_n_epoch=1, default_root_dir=base_dir,
                           weights_save_path=base_dir, profiler="simple",
                           callbacks=[EarlyStopping(monitor='val_loss'), checkpoint_callback])
 
         path = glob.glob(f'{base_dir}/*.ckpt')
-        if path:
-            model = BlackBoxSimple.load_from_checkpoint(path[0])
-        else:
-            model = BlackBoxSimple(n_concepts=10)
-            trainer.fit(model, val_loader, val_loader)
+        # if path:
+        #     model = BlackBoxSimple.load_from_checkpoint(path[0])
+        # else:
+        model = BlackBoxSimple(n_concepts=10)
+        trainer.fit(model, train_loader, val_loader)
 
         model.freeze()
         trainer.test(model, test_dataloaders=test_loader)
 
         data_dir = '../experiments/data/MNIST_X_to_C'
-        # dataset = model.transform(train_loader, base_dir=data_dir, extension='training')
+        dataset = model.transform(train_loader, base_dir=data_dir, extension='training')
         dataset = model.transform(val_loader, base_dir=data_dir, extension='validation')
         dataset = model.transform(test_loader, base_dir=data_dir, extension='test')
 
@@ -79,20 +80,25 @@ class TestTemplateObject(unittest.TestCase):
 
         # training
         checkpoint_callback = ModelCheckpoint(dirpath=base_dir, monitor='val_loss', save_top_k=1)
-        trainer = Trainer(max_epochs=1, gpus=1, auto_lr_find=True, deterministic=False,
+        trainer = Trainer(max_epochs=10, gpus=1, auto_lr_find=True, deterministic=False,
                           check_val_every_n_epoch=1, default_root_dir=base_dir,
                           weights_save_path=base_dir, profiler="simple",
                           callbacks=[EarlyStopping(monitor='val_loss'), checkpoint_callback])
 
         path = glob.glob(f'{base_dir}/*.ckpt')
-        if path:
-            model = BlackBoxResNet18.load_from_checkpoint(path[0])
-        else:
-            model = BlackBoxResNet18(n_concepts=10, model=MnistResNet())
-            trainer.fit(model, val_loader, val_loader)
+        # if path:
+        #     model = BlackBoxResNet18.load_from_checkpoint(path[0])
+        # else:
+        model = BlackBoxResNet18(n_concepts=10, model=MnistResNet())
+        trainer.fit(model, train_loader, val_loader)
 
         model.freeze()
         trainer.test(model, test_dataloaders=test_loader)
+
+        data_dir = '../experiments/data/MNIST_X_to_C'
+        dataset = model.transform(train_loader, base_dir=data_dir, extension='training')
+        dataset = model.transform(val_loader, base_dir=data_dir, extension='validation')
+        dataset = model.transform(test_loader, base_dir=data_dir, extension='test')
 
 
 if __name__ == '__main__':

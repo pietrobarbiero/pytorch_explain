@@ -10,8 +10,8 @@ from torch_explain.models.base import BaseClassifier, concept_accuracy
 
 
 class BlackBoxSimple(BaseClassifier):
-    def __init__(self, n_concepts: int, optimizer: str = 'adamw', concept_loss: _Loss = nn.BCELoss(), lr: float = 1e-3,
-                 activation: callable = torch.sigmoid, accuracy_score: callable = concept_accuracy):
+    def __init__(self, n_concepts: int, optimizer: str = 'adamw', concept_loss: _Loss = nn.BCEWithLogitsLoss(),
+                 lr: float = 1e-3, activation: callable = torch.sigmoid, accuracy_score: callable = concept_accuracy):
         super().__init__(n_concepts, optimizer, concept_loss, lr, activation, accuracy_score)
 
         # base net
@@ -29,7 +29,7 @@ class BlackBoxSimple(BaseClassifier):
 
 class BlackBoxResNet18(BaseClassifier):
     def __init__(self, n_concepts: int, model: nn.Module = resnet18(pretrained=False),
-                 optimizer: str = 'adamw', concept_loss: _Loss = nn.BCELoss(),
+                 optimizer: str = 'adamw', concept_loss: _Loss = nn.BCEWithLogitsLoss(),
                  lr: float = 1e-3, activation: callable = torch.sigmoid, accuracy_score: callable = concept_accuracy):
         super().__init__(n_concepts, optimizer, concept_loss, lr, activation, accuracy_score)
         # base net

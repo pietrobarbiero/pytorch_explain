@@ -19,14 +19,14 @@ class TestTemplateObject(unittest.TestCase):
         # train_data = torch.load('../experiments/data/MNIST_X_to_C/c2y_training.pt')
         val_data = torch.load('../experiments/data/MNIST_X_to_C/c2y_validation.pt')
         test_data = torch.load('../experiments/data/MNIST_X_to_C/c2y_test.pt')
-        # val_data.tensors = ((val_data.tensors[1]>0.5).to(torch.float),
-        #                     (val_data.tensors[1].argmax(dim=1) % 2 == 1).to(torch.long))
-        # test_data.tensors = ((test_data.tensors[1]>0.5).to(torch.float),
-        #                      (test_data.tensors[1].argmax(dim=1) % 2 == 1).to(torch.long))
-        val_data.tensors = (torch.cat((val_data.tensors[1], torch.zeros((val_data.tensors[1].shape[0], 2))), 1),
+        val_data.tensors = ((val_data.tensors[0]).to(torch.float),
                             (one_hot((val_data.tensors[1].argmax(dim=1) % 2 == 1).to(torch.long)).to(torch.float)))
-        test_data.tensors = (torch.cat((test_data.tensors[1], torch.zeros((test_data.tensors[1].shape[0], 2))), 1),
+        test_data.tensors = ((test_data.tensors[0]).to(torch.float),
                              (one_hot((test_data.tensors[1].argmax(dim=1) % 2 == 1).to(torch.long)).to(torch.float)))
+        # val_data.tensors = (torch.cat((val_data.tensors[1], torch.zeros((val_data.tensors[1].shape[0], 2))), 1),
+        #                     (one_hot((val_data.tensors[1].argmax(dim=1) % 2 == 1).to(torch.long)).to(torch.float)))
+        # test_data.tensors = (torch.cat((test_data.tensors[1], torch.zeros((test_data.tensors[1].shape[0], 2))), 1),
+        #                      (one_hot((test_data.tensors[1].argmax(dim=1) % 2 == 1).to(torch.long)).to(torch.float)))
         # train_loader = DataLoader(train_data, batch_size=180)
         val_loader = DataLoader(val_data, batch_size=180)
         test_loader = DataLoader(test_data, batch_size=180)
@@ -42,15 +42,17 @@ class TestTemplateObject(unittest.TestCase):
                           weights_save_path=base_dir, profiler="simple",
                           callbacks=[checkpoint_callback])
 
-        model = MuExplainer(n_concepts=12, n_classes=2, l1=0.00001, lr=0.01, explainer_hidden=[10, 10])
+        model = MuExplainer(n_concepts=10, n_classes=2, l1=0.0000001, temperature=5, lr=0.01,
+                            explainer_hidden=[10], conceptizator='identity')
         trainer.fit(model, val_loader, val_loader)
 
         model.freeze()
         trainer.test(model, test_dataloaders=test_loader)
-        results, results_full = model.explain_class(val_loader, test_loader, topk_explanations=20)
+        results, results_full = model.explain_class(val_loader, val_loader, test_loader, topk_explanations=5,
+                                                    x_to_bool=None, max_accuracy=True)
         print(results)
         print(results_full[0]['explanation'])
-        print(model.model[0].gamma)
+        print(model.model[0].alpha / model.model[0].alpha.max(dim=1)[0].unsqueeze(1))
         assert results_full[0]['explanation'] == '(feature0000000000 & ~feature0000000001 & ~feature0000000002 & ~feature0000000003 & ~feature0000000004 & ~feature0000000005 & ~feature0000000006 & ~feature0000000007 & ~feature0000000008 & ~feature0000000009) | (feature0000000002 & ~feature0000000000 & ~feature0000000001 & ~feature0000000003 & ~feature0000000004 & ~feature0000000005 & ~feature0000000006 & ~feature0000000007 & ~feature0000000008 & ~feature0000000009) | (feature0000000004 & ~feature0000000000 & ~feature0000000001 & ~feature0000000002 & ~feature0000000003 & ~feature0000000005 & ~feature0000000006 & ~feature0000000007 & ~feature0000000008 & ~feature0000000009) | (feature0000000006 & ~feature0000000000 & ~feature0000000001 & ~feature0000000002 & ~feature0000000003 & ~feature0000000004 & ~feature0000000005 & ~feature0000000007 & ~feature0000000008 & ~feature0000000009) | (feature0000000008 & ~feature0000000000 & ~feature0000000001 & ~feature0000000002 & ~feature0000000003 & ~feature0000000004 & ~feature0000000005 & ~feature0000000006 & ~feature0000000007 & ~feature0000000009)'
 
 
