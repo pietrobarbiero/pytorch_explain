@@ -121,7 +121,8 @@ class MuExplainer(BaseExplainer):
     def explain_class(self, train_dataloaders: DataLoader, val_dataloaders: DataLoader, test_dataloaders: DataLoader,
                       target_class: Union[int, str] = 'all', concept_names: List = None,
                       topk_explanations: int = 3, max_minterm_complexity: int = None,
-                      max_accuracy: bool = False, x_to_bool: int = 0.5, y_to_one_hot: bool = False):
+                      max_accuracy: bool = False, x_to_bool: int = 0.5,
+                      y_to_one_hot: bool = False, verbose: bool = False):
 
         x_train, y_train_out, y_train_1h = self.transform(train_dataloaders, x_to_bool=x_to_bool)
         x_val, y_val_out, y_val_1h = self.transform(val_dataloaders, x_to_bool=x_to_bool)
@@ -145,13 +146,16 @@ class MuExplainer(BaseExplainer):
                                                                              max_minterm_complexity=max_minterm_complexity,
                                                                              concept_names=concept_names,
                                                                              max_accuracy=max_accuracy)
-            explanation_accuracy, y_formula = test_explanation(explanation_raw, target_class=target_class,
-                                                   x=x_test, y=y_test_1h[:, target_class], metric=f1_score)
-                                                   # x=x_val, y=y_val_1h[:, target_class])
-            # explanation_fidelity = accuracy_score(y_test_out[:, target_class] > 0.5, y_formula)
-            explanation_fidelity = accuracy_score(y_test_out.argmax(dim=1).eq(target_class), y_formula)
-            # explanation_fidelity = accuracy_score(y_val_out.argmax(dim=1).eq(target_class), y_formula)
-            explanation_complexity = complexity(class_explanation)
+            if class_explanation:
+                explanation_accuracy, y_formula = test_explanation(explanation_raw, target_class=target_class,
+                                                       x=x_test, y=y_test_1h[:, target_class], metric=f1_score)
+                                                       # x=x_val, y=y_val_1h[:, target_class])
+                # explanation_fidelity = accuracy_score(y_test_out[:, target_class] > 0.5, y_formula)
+                explanation_fidelity = accuracy_score(y_test_out.argmax(dim=1).eq(target_class), y_formula)
+                # explanation_fidelity = accuracy_score(y_val_out.argmax(dim=1).eq(target_class), y_formula)
+                explanation_complexity = complexity(class_explanation)
+            else:
+                explanation_accuracy, explanation_fidelity, explanation_complexity = 0, 0, 0
             results = {
                 'target_class': target_class,
                 'explanation': class_explanation,
@@ -159,6 +163,8 @@ class MuExplainer(BaseExplainer):
                 'explanation_fidelity': explanation_fidelity,
                 'explanation_complexity': explanation_complexity,
             }
+            if verbose:
+                print(f'Target class: {target_class}\n\t Results: {results}')
             result_list.append(results)
             exp_accuracy.append(explanation_accuracy)
             exp_fidelity.append(explanation_fidelity)
