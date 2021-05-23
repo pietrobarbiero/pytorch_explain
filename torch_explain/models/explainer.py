@@ -80,13 +80,15 @@ class BaseExplainer(BaseClassifier):
 class MuExplainer(BaseExplainer):
     def __init__(self, n_concepts: int, n_classes: int, optimizer: str = 'adamw', loss: _Loss = nn.CrossEntropyLoss(),
                  lr: float = 1e-2, activation: callable = F.log_softmax, accuracy_score: callable = task_accuracy,
-                 explainer_hidden: list = (8, 3), l1: float = 1e-5, temperature: float = 0.6, awareness: str = 'l1'):
+                 explainer_hidden: list = (8, 3), l1: float = 1e-5, temperature: float = 0.6,
+                 awareness: str = 'entropy', conceptizator: str = 'identity_bool'):
         super().__init__(n_concepts, n_classes, optimizer, loss, lr, activation,
                          accuracy_score, explainer_hidden, l1)
 
         self.temperature = temperature
         self.model_layers = []
-        self.model_layers.append(ConceptAware(n_concepts, explainer_hidden[0], n_classes, temperature, awareness))
+        self.model_layers.append(ConceptAware(n_concepts, explainer_hidden[0], n_classes,
+                                              temperature, awareness, conceptizator))
         self.model_layers.append(torch.nn.LeakyReLU())
         self.model_layers.append(Dropout())
         for i in range(1, len(explainer_hidden)):
@@ -101,7 +103,7 @@ class MuExplainer(BaseExplainer):
 
         self.save_hyperparameters()
 
-    def transform(self, dataloader: DataLoader, x_to_bool: bool = True, y_to_one_hot: bool = True):
+    def transform(self, dataloader: DataLoader, x_to_bool: int = 0.5, y_to_one_hot: bool = True):
         x_list, y_out_list, y_list = [], [], []
         for i_batch, (x, y) in enumerate(dataloader):
             y_out = self.forward(x.to(self.device))
@@ -110,8 +112,8 @@ class MuExplainer(BaseExplainer):
             y_list.append(y.cpu())
         x, y_out, y = torch.cat(x_list), torch.cat(y_out_list), torch.cat(y_list)
 
-        if x_to_bool:
-            x = (x.cpu() > 0.5).to(torch.float)
+        if x_to_bool is not None:
+            x = (x.cpu() > x_to_bool).to(torch.float)
         # if y_to_one_hot:
         #     y = F.one_hot(y)
         return x, y_out, y
@@ -119,11 +121,11 @@ class MuExplainer(BaseExplainer):
     def explain_class(self, train_dataloaders: DataLoader, val_dataloaders: DataLoader, test_dataloaders: DataLoader,
                       target_class: Union[int, str] = 'all', concept_names: List = None,
                       topk_explanations: int = 3, max_minterm_complexity: int = None,
-                      max_accuracy: bool = False, x_to_bool: bool = True, y_to_one_hot: bool = False):
+                      max_accuracy: bool = False, x_to_bool: int = 0.5, y_to_one_hot: bool = False):
 
-        x_train, y_train_out, y_train_1h = self.transform(train_dataloaders)
-        x_val, y_val_out, y_val_1h = self.transform(val_dataloaders)
-        x_test, y_test_out, y_test_1h = self.transform(test_dataloaders)
+        x_train, y_train_out, y_train_1h = self.transform(train_dataloaders, x_to_bool=x_to_bool)
+        x_val, y_val_out, y_val_1h = self.transform(val_dataloaders, x_to_bool=x_to_bool)
+        x_test, y_test_out, y_test_1h = self.transform(test_dataloaders, x_to_bool=x_to_bool)
 
         # model_accuracy = f1_score(y_test_1h.argmax(dim=1), y_test_out.argmax(dim=1))
 

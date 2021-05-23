@@ -127,8 +127,8 @@ def _simplify_formula(explanation: str, x: torch.Tensor, y: torch.Tensor, target
 
         if explanation_simplified:
             accuracy, preds = test_explanation(explanation_simplified, target_class, x, y, metric=accuracy_score)
-            # if (max_accuracy and accuracy == 1.) or (not max_accuracy and accuracy >= base_accuracy):
-            if accuracy >= base_accuracy:
+            if (max_accuracy and accuracy == 1.) or (not max_accuracy and accuracy >= base_accuracy):
+            # if accuracy >= base_accuracy:
                 explanation = copy.deepcopy(explanation_simplified)
                 base_accuracy = accuracy
 

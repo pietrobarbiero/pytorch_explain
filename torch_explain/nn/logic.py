@@ -12,12 +12,12 @@ class ConceptAware(nn.Module):
     """
 
     def __init__(self, in_features: int, out_features: int, n_classes: int, temperature: float = 0.6,
-                 awareness: str = 'l1', bias: bool = True) -> None:
+                 awareness: str = 'l1', bias: bool = True, conceptizator: str = 'identity_bool') -> None:
         super(ConceptAware, self).__init__()
         self.n_classes = n_classes
         self.awareness = awareness
         self.temperature = temperature
-        self.conceptizator = Conceptizator('identity_bool')
+        self.conceptizator = Conceptizator(conceptizator)
         self.alpha = None
         self.gamma = None
         self.weight = nn.Parameter(torch.Tensor(n_classes, out_features, in_features))
