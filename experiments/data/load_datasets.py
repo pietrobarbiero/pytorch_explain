@@ -217,6 +217,47 @@ def load_cub(base_dir='./data'):
     return x, y, concept_names
 
 
+# def load_cub(base_dir='./data'):
+#     train_data = pd.read_csv(os.path.join(base_dir, 'CUB/cub200.csv'))
+#     x = train_data.iloc[:, :-1].values
+#     y = train_data.iloc[:, -1].values
+#     concept_names = [f'feature{i:03}' for i in range(x.shape[1])]
+#
+#     skf = StratifiedShuffleSplit(n_splits=10, random_state=42)
+#     skf2 = StratifiedShuffleSplit(n_splits=10, random_state=42)
+#     for trainval_idx, test_idx in skf.split(x, y):
+#         x_trainval, y_trainval = x[trainval_idx], y[trainval_idx]
+#         for train_idx, val_idx in skf2.split(x_trainval, y_trainval):
+#             x_train, x_val, x_test = x[train_idx], x[val_idx], x[test_idx]
+#             y_train, y_val, y_test = y[train_idx], y[val_idx], y[test_idx]
+#
+#             print(np.unique(y_train, return_counts=True))
+#             print(np.unique(y_val, return_counts=True))
+#             print(np.unique(y_test, return_counts=True))
+#             print(np.unique(y, return_counts=True))
+#
+#             x_train = torch.FloatTensor(x_train)
+#             y_train = one_hot(torch.tensor(y_train).to(torch.long)).to(torch.float)
+#             x_val = torch.FloatTensor(x_val)
+#             y_val = one_hot(torch.tensor(y_val).to(torch.long)).to(torch.float)
+#             x_test = torch.FloatTensor(x_test)
+#             y_test = one_hot(torch.tensor(y_test).to(torch.long)).to(torch.float)
+#
+#             print(one_hot(torch.tensor(y[trainval_idx]).to(torch.long)).to(torch.float).shape)
+#             print(y_train.shape)
+#             print(y_val.shape)
+#             print(y_test.shape)
+#             print(y_train.sum(dim=0))
+#             print(y_val.sum(dim=0))
+#             print(y_test.sum(dim=0))
+#             print(np.unique(y, return_counts=True))
+#
+#             train_data = TensorDataset(x_train, y_train)
+#             val_data = TensorDataset(x_val, y_val)
+#             test_data = TensorDataset(x_test, y_test)
+#             return train_data, val_data, test_data, concept_names
+
+
 if __name__ == '__main__':
     x, y, c = load_vDem('.')
     # x, y, c = load_celldiff('.')

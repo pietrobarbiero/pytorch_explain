@@ -40,7 +40,7 @@ x, y, concept_names = load_cub()
 
 dataset = TensorDataset(x, y)
 
-train_size = int(len(dataset) * 0.5)
+train_size = int(len(dataset) * 0.6)
 val_size = (len(dataset) - train_size) // 2
 test_size = len(dataset) - train_size - val_size
 train_data, val_data, test_data = random_split(dataset, [train_size, val_size, test_size])
@@ -62,7 +62,7 @@ print(n_classes)
 base_dir = f'./results/CUB/explainer'
 os.makedirs(base_dir, exist_ok=True)
 
-batch_size = 512
+batch_size = 1024
 n_seeds = 5
 results_list = []
 explanations = {i: [] for i in range(n_classes)}
@@ -74,10 +74,10 @@ for seed in range(n_seeds):
     test_loader = DataLoader(test_data, batch_size=batch_size)
 
     checkpoint_callback = ModelCheckpoint(dirpath=base_dir, monitor='val_loss', save_top_k=1)
-    trainer = Trainer(max_epochs=100, gpus=1, auto_lr_find=True, deterministic=True,
+    trainer = Trainer(max_epochs=500, gpus=1, auto_lr_find=True, deterministic=True,
                       check_val_every_n_epoch=1, default_root_dir=base_dir,
                       weights_save_path=base_dir, callbacks=[checkpoint_callback])
-    model = MuExplainer(n_concepts=n_concepts, n_classes=n_classes, l1=0.001, temperature=0.7, lr=0.01,
+    model = MuExplainer(n_concepts=n_concepts, n_classes=n_classes, l1=0.001, temperature=0.7, lr=0.001,
                         explainer_hidden=[10])
 
     start = time.time()
@@ -88,8 +88,8 @@ for seed in range(n_seeds):
     for j in range(n_classes):
         n_used_concepts = sum(model.model[0].concept_mask[j] > 0.5)
         print(f"Extracted concepts: {n_used_concepts}")
-    results, f = model.explain_class(val_loader, val_loader, test_loader, topk_explanations=5,
-                                     max_accuracy=True, concept_names=concept_names, verbose=True)
+    results, f = model.explain_class(val_loader, train_loader, test_loader, topk_explanations=50,
+                                     concept_names=concept_names, verbose=True)
     end = time.time() - start
     results['model_accuracy'] = model_results[0]['test_acc']
     results['extraction_time'] = end
@@ -103,13 +103,15 @@ for seed in range(n_seeds):
         print(f"Extracted concepts: {n_used_concepts}")
         print(f"Explanation: {f[j]['explanation']}")
         print(f"Explanation accuracy: {f[j]['explanation_accuracy']}")
-        explanations[j].append(f[j]['explanation'])
+        if f[j]['explanation'] is not None:
+            explanations[j].append(f[j]['explanation'])
         extracted_concepts.append(n_used_concepts)
         all_concepts += model.model[0].concept_mask[j] > 0.5
         common_concepts *= model.model[0].concept_mask[j] > 0.5
 
     results['extracted_concepts'] = np.mean(extracted_concepts)
     results['common_concepts_ratio'] = sum(common_concepts) / sum(all_concepts)
+    # break
 
 consistencies = []
 for j in range(n_classes):
