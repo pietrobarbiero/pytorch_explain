@@ -36,10 +36,19 @@ from experiments.data.load_datasets import load_mnist
 ## Import MIMIC-II dataset
 
 # %%
-train_data, val_data, test_data, concept_names = load_mnist()
-train_loader = DataLoader(train_data, batch_size=180)
-val_loader = DataLoader(val_data, batch_size=180)
-test_loader = DataLoader(test_data, batch_size=180)
+x, y, concept_names = load_mnist()
+
+
+dataset = TensorDataset(x, y)
+
+train_size = int(len(dataset) * 0.9)
+val_size = (len(dataset) - train_size) // 2
+test_size = len(dataset) - train_size - val_size
+train_data, val_data, test_data = random_split(dataset, [train_size, val_size, test_size])
+
+train_loader = DataLoader(train_data, batch_size=len(train_data))
+val_loader = DataLoader(val_data, batch_size=len(val_data))
+test_loader = DataLoader(test_data, batch_size=len(test_data))
 
 n_concepts = next(iter(train_loader))[0].shape[1]
 n_classes = 2
@@ -55,19 +64,18 @@ print(n_classes)
 base_dir = f'./results/MNIST/explainer'
 os.makedirs(base_dir, exist_ok=True)
 
-batch_size = 512
 n_seeds = 5
 results_list = []
 explanations = {i: [] for i in range(n_classes)}
 for seed in range(n_seeds):
     seed_everything(seed)
     print(f'Seed [{seed + 1}/{n_seeds}]')
-    train_loader = DataLoader(train_data, batch_size=batch_size)
-    val_loader = DataLoader(val_data, batch_size=batch_size)
-    test_loader = DataLoader(test_data, batch_size=batch_size)
+    train_loader = DataLoader(train_data, batch_size=len(train_data))
+    val_loader = DataLoader(val_data, batch_size=len(val_data))
+    test_loader = DataLoader(test_data, batch_size=len(test_data))
 
     checkpoint_callback = ModelCheckpoint(dirpath=base_dir, monitor='val_loss', save_top_k=1)
-    trainer = Trainer(max_epochs=20, gpus=1, auto_lr_find=True, deterministic=True,
+    trainer = Trainer(max_epochs=100, gpus=1, auto_lr_find=True, deterministic=True,
                       check_val_every_n_epoch=1, default_root_dir=base_dir,
                       weights_save_path=base_dir, callbacks=[checkpoint_callback])
     model = MuExplainer(n_concepts=n_concepts, n_classes=n_classes, l1=0.0000001, temperature=5, lr=0.01,
