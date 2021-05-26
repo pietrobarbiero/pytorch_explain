@@ -50,8 +50,8 @@ class ConceptAware(nn.Module):
         alpha_norm = self.alpha / self.alpha.max(dim=1)[0].unsqueeze(1)
         self.concept_mask = alpha_norm > 0.5
         x = input.multiply(alpha_norm.unsqueeze(1))
-
         # x = input
+
         # self.concept_mask = self.alpha >= self.alpha.topk(self.max_complexity)[0][:, -1].unsqueeze(1)
         # # x = input.repeat(2, 1, 1).permute(0, 2, 1)
         # # x[~self.concept_mask] = 0

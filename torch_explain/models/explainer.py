@@ -147,8 +147,10 @@ class MuExplainer(BaseExplainer):
                                                                              concept_names=concept_names,
                                                                              max_accuracy=max_accuracy)
             if class_explanation:
+                metric = f1_score
+                metric.__setattr__('average', 'macro')
                 explanation_accuracy, y_formula = test_explanation(explanation_raw, target_class=target_class,
-                                                       x=x_test, y=y_test_1h[:, target_class], metric=f1_score)
+                                                       x=x_test, y=y_test_1h[:, target_class], metric=f1_score) # FIXME: macro F1
                                                        # x=x_val, y=y_val_1h[:, target_class])
                 # explanation_fidelity = accuracy_score(y_test_out[:, target_class] > 0.5, y_formula)
                 explanation_fidelity = accuracy_score(y_test_out.argmax(dim=1).eq(target_class), y_formula)
