@@ -4,7 +4,7 @@ import sympy
 
 import torch
 import numpy as np
-from sklearn.metrics import accuracy_score
+from sklearn.metrics import accuracy_score, f1_score
 from sympy import to_dnf, lambdify
 
 
@@ -48,7 +48,8 @@ def test_explanation(explanation: str, target_class: int, x: torch.Tensor, y: to
         x = x.cpu().detach().numpy()
         predictions = fun(*[x[:, i] > 0.5 for i in range(x.shape[1])])
 
-    accuracy = metric(y, predictions)
+    # accuracy = metric(y, predictions)
+    accuracy = f1_score(y, predictions, average='macro')
     return accuracy, predictions
 
 
