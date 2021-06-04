@@ -24,7 +24,7 @@ class TestTemplateObject(unittest.TestCase):
             y = torch.tensor([0, 1, 1, 0], dtype=torch.long)
 
             layers = [
-                te.nn.ConceptAware(2, 10, n_classes=2, awareness='entropy'),
+                te.nn.EntropyLinear(2, 10, n_classes=2, awareness='entropy'),
                 torch.nn.LeakyReLU(),
                 te.nn.LinearIndependent(10, 10, n_classes=2),
                 torch.nn.LeakyReLU(),
@@ -39,7 +39,7 @@ class TestTemplateObject(unittest.TestCase):
             for epoch in range(61):
                 optimizer.zero_grad()
                 y_pred = model(x)
-                loss = loss_form(y_pred, y) + 0.0001 * te.nn.functional.concept_aware_loss(model)
+                loss = loss_form(y_pred, y) + 0.0001 * te.nn.functional.entropy_logic_loss(model)
 
                 loss.backward()
                 optimizer.step()
@@ -82,22 +82,22 @@ class TestTemplateObject(unittest.TestCase):
             y = torch.tensor([0, 1, 1, 0], dtype=torch.long)
 
             layers = [
-                te.nn.ConceptAware(x.shape[1], 10, n_classes=2, awareness='l1'),
+                te.nn.EntropyLinear(x.shape[1], 10, n_classes=2, awareness='l1'),
                 torch.nn.LeakyReLU(),
                 te.nn.LinearIndependent(10, 10, n_classes=2),
                 torch.nn.LeakyReLU(),
                 te.nn.LinearIndependent(10, 1, n_classes=2, top=True),
-                torch.nn.LogSoftmax(dim=1)
+                # torch.nn.LogSoftmax(dim=1)
             ]
             model = torch.nn.Sequential(*layers)
 
             optimizer = torch.optim.AdamW(model.parameters(), lr=0.01)
-            loss_form = torch.nn.NLLLoss()
+            loss_form = torch.nn.CrossEntropyLoss()
             model.train()
             for epoch in range(1001):
                 optimizer.zero_grad()
                 y_pred = model(x)
-                loss = loss_form(y_pred, y) + 0.00001 * te.nn.functional.concept_aware_loss(model)
+                loss = loss_form(y_pred, y) + 0.00001 * te.nn.functional.entropy_logic_loss(model)
 
                 loss.backward()
                 optimizer.step()
@@ -110,12 +110,12 @@ class TestTemplateObject(unittest.TestCase):
             print(model[0].gamma)
 
             y1h = one_hot(y)
-            class_explanation, class_explanations, _ = explain_class(model, x, y1h, target_class=0)
+            class_explanation, class_explanations, _ = explain_class(model, x, y1h, x, y1h, target_class=0)
             print(class_explanation)
             print(class_explanations)
             assert class_explanation == '(feature0000000000 & feature0000000001) | (~feature0000000000 & ~feature0000000001)'
 
-            class_explanation, class_explanations, _ = explain_class(model, x, y1h, target_class=1)
+            class_explanation, class_explanations, _ = explain_class(model, x, y1h, x, y1h, target_class=1)
             print(class_explanation)
             print(class_explanations)
             assert class_explanation == '(feature0000000000 & ~feature0000000001) | (feature0000000001 & ~feature0000000000)'
@@ -138,7 +138,7 @@ class TestTemplateObject(unittest.TestCase):
             y = torch.tensor([0, 1, 1, 0], dtype=torch.long)
 
             layers = [
-                te.nn.ConceptAware(x.shape[1], 10, n_classes=2, awareness='entropy'),
+                te.nn.EntropyLinear(x.shape[1], 10, n_classes=2, awareness='entropy'),
                 torch.nn.LeakyReLU(),
                 te.nn.LinearIndependent(10, 10, n_classes=2),
                 torch.nn.LeakyReLU(),
@@ -153,7 +153,7 @@ class TestTemplateObject(unittest.TestCase):
             for epoch in range(1001):
                 optimizer.zero_grad()
                 y_pred = model(x)
-                loss = loss_form(y_pred, y) + 0.00001 * te.nn.functional.concept_aware_loss(model)
+                loss = loss_form(y_pred, y) + 0.00001 * te.nn.functional.entropy_logic_loss(model)
 
                 loss.backward()
                 optimizer.step()
@@ -193,7 +193,7 @@ class TestTemplateObject(unittest.TestCase):
             y1h = one_hot(y).to(torch.float)
 
             layers = [
-                te.nn.ConceptAware(4, 10, n_classes=3, awareness='l1'),
+                te.nn.EntropyLinear(4, 10, n_classes=3, awareness='l1'),
                 torch.nn.LeakyReLU(),
                 te.nn.LinearIndependent(10, 10, n_classes=3),
                 torch.nn.LeakyReLU(),
@@ -208,7 +208,7 @@ class TestTemplateObject(unittest.TestCase):
             for epoch in range(1001):
                 optimizer.zero_grad()
                 y_pred = model(x)
-                loss = loss_form(y_pred, y1h) + 0.0001 * te.nn.functional.concept_aware_loss(model)
+                loss = loss_form(y_pred, y1h) + 0.0001 * te.nn.functional.entropy_logic_loss(model)
 
                 loss.backward()
                 optimizer.step()

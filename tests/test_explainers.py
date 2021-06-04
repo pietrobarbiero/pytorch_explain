@@ -16,9 +16,11 @@ class TestTemplateObject(unittest.TestCase):
     def test_mu_classifier(self):
         seed_everything(42)
         # data
-        # train_data = torch.load('../experiments/data/MNIST_X_to_C/c2y_training.pt')
+        train_data = torch.load('../experiments/data/MNIST_X_to_C/c2y_training.pt')
         val_data = torch.load('../experiments/data/MNIST_X_to_C/c2y_validation.pt')
         test_data = torch.load('../experiments/data/MNIST_X_to_C/c2y_test.pt')
+        train_data.tensors = ((train_data.tensors[0]).to(torch.float),
+                            (one_hot((train_data.tensors[1].argmax(dim=1) % 2 == 1).to(torch.long)).to(torch.float)))
         val_data.tensors = ((val_data.tensors[0]).to(torch.float),
                             (one_hot((val_data.tensors[1].argmax(dim=1) % 2 == 1).to(torch.long)).to(torch.float)))
         test_data.tensors = ((test_data.tensors[0]).to(torch.float),

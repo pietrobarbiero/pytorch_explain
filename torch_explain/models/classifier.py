@@ -17,7 +17,7 @@ from pytorch_lightning import Trainer, seed_everything
 from torchvision.models.resnet import BasicBlock
 
 from torch_explain.logic.nn import explain_class
-from torch_explain.nn import ConceptAware
+from torch_explain.nn import EntropyLinear
 from torch_explain.nn.functional import l1_loss
 
 
@@ -58,7 +58,7 @@ class Explainer(pl.LightningModule):
         # explainer
         self.explainer_layers = []
         if len(explainer_hidden) > 0:
-            self.explainer_layers.append(ConceptAware(n_concepts, explainer_hidden[0], activation=concept_activation))
+            self.explainer_layers.append(EntropyLinear(n_concepts, explainer_hidden[0], activation=concept_activation))
             self.explainer_layers.append(nn.LeakyReLU())
             for i in range(len(explainer_hidden)):
                 in_features = n_concepts if i == 0 else explainer_hidden[-1]
@@ -66,12 +66,12 @@ class Explainer(pl.LightningModule):
                 self.explainer_layers.append(nn.LeakyReLU())
 
             self.explainer_layers.append(nn.Linear(explainer_hidden[-1], n_classes))
-            self.explainer_layers.append(ConceptAware(n_classes, n_classes, activation='identity', top=True))
+            self.explainer_layers.append(EntropyLinear(n_classes, n_classes, activation='identity', top=True))
 
         else:
             self.explainer_layers = [
-                ConceptAware(n_concepts, n_classes, activation=concept_activation),
-                ConceptAware(n_classes, n_classes, activation='identity', top=True),
+                EntropyLinear(n_concepts, n_classes, activation=concept_activation),
+                EntropyLinear(n_classes, n_classes, activation='identity', top=True),
             ]
 
         self.explainer = torch.nn.Sequential(*self.explainer_layers)

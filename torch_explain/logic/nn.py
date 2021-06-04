@@ -9,7 +9,7 @@ from sympy import simplify_logic
 
 from torch_explain.logic.metrics import test_explanation
 from torch_explain.logic.utils import replace_names
-from torch_explain.nn.logic import ConceptAware, LinearIndependent
+from torch_explain.nn.logic import EntropyLinear, LinearIndependent
 
 
 def explain_class(model: torch.nn.Module, x, y, x_val: torch.Tensor, y_val: torch.Tensor,
@@ -37,7 +37,7 @@ def explain_class(model: torch.nn.Module, x, y, x_val: torch.Tensor, y_val: torc
     is_first = True
     for layer_id, module in enumerate(model.children()):
         # analyze only logic layers
-        if isinstance(module, ConceptAware) or isinstance(module, LinearIndependent):
+        if isinstance(module, EntropyLinear) or isinstance(module, LinearIndependent):
 
             if is_first:
                 prev_module = module

@@ -7,13 +7,13 @@ from torch import nn
 from .concepts import Conceptizator
 
 
-class ConceptAware(nn.Module):
+class EntropyLinear(nn.Module):
     """Applies a linear transformation to the incoming data: :math:`y = xA^T + b`
     """
 
     def __init__(self, in_features: int, out_features: int, n_classes: int, temperature: float = 0.6,
-                 awareness: str = 'l1', bias: bool = True, conceptizator: str = 'identity_bool') -> None:
-        super(ConceptAware, self).__init__()
+                 awareness: str = 'entropy', bias: bool = True, conceptizator: str = 'identity_bool') -> None:
+        super(EntropyLinear, self).__init__()
         self.n_classes = n_classes
         self.awareness = awareness
         self.temperature = temperature
@@ -107,7 +107,7 @@ class LinearIndependent(nn.Module):
 
 if __name__ == '__main__':
     data = torch.rand((10, 5))
-    layer = ConceptAware(5, 4, 2)
+    layer = EntropyLinear(5, 4, 2)
     out = layer(data)
     print(out.shape)
     layer2 = LinearIndependent(4, 3, 2)

@@ -70,9 +70,10 @@ class TestTemplateObject(unittest.TestCase):
         ])
         dataset = MNIST_X_to_C('../experiments/data', train=True, download=True, transform=mnist_transforms)
         train_data, val_data, test_data = random_split(dataset, [50000, 5000, 5000])
-        train_loader = DataLoader(train_data, batch_size=180)
-        val_loader = DataLoader(val_data, batch_size=180)
-        test_loader = DataLoader(test_data, batch_size=180)
+        batch_size = 180
+        train_loader = DataLoader(train_data, batch_size=batch_size)
+        val_loader = DataLoader(val_data, batch_size=batch_size)
+        test_loader = DataLoader(test_data, batch_size=batch_size)
 
         # model
         base_dir = f'../experiments/results/MNIST/resnet18'
@@ -80,7 +81,7 @@ class TestTemplateObject(unittest.TestCase):
 
         # training
         checkpoint_callback = ModelCheckpoint(dirpath=base_dir, monitor='val_loss', save_top_k=1)
-        trainer = Trainer(max_epochs=10, gpus=1, auto_lr_find=True, deterministic=False,
+        trainer = Trainer(max_epochs=30, gpus=1, auto_lr_find=True, deterministic=False,
                           check_val_every_n_epoch=1, default_root_dir=base_dir,
                           weights_save_path=base_dir, profiler="simple",
                           callbacks=[EarlyStopping(monitor='val_loss'), checkpoint_callback])

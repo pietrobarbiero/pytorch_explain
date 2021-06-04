@@ -18,8 +18,8 @@ from torch_explain.logic.nn import explain_class
 from torch_explain.logic.metrics import test_explanation, complexity
 from torch_explain.models.base import task_accuracy, BaseClassifier, concept_accuracy
 from torch_explain.nn import Conceptizator
-from torch_explain.nn.functional import l1_loss, concept_aware_loss
-from torch_explain.nn.logic import ConceptAware, LinearIndependent
+from torch_explain.nn.functional import l1_loss, entropy_logic_loss
+from torch_explain.nn.logic import EntropyLinear, LinearIndependent
 
 
 class BaseExplainer(BaseClassifier):
@@ -41,9 +41,9 @@ class BaseExplainer(BaseClassifier):
         x, y = batch
         y_out = self.forward(x)
         if self.loss.__class__.__name__ == 'CrossEntropyLoss':
-            loss = self.loss(y_out, y.argmax(dim=1)) + self.l1 * concept_aware_loss(self.model) #+ 0.00001 * l1_loss(self.model)
+            loss = self.loss(y_out, y.argmax(dim=1)) + self.l1 * entropy_logic_loss(self.model) #+ 0.00001 * l1_loss(self.model)
         else:
-            loss = self.loss(y_out, y) + self.l1 * concept_aware_loss(self.model) #+ 0.00001 * l1_loss(self.model)
+            loss = self.loss(y_out, y) + self.l1 * entropy_logic_loss(self.model) #+ 0.00001 * l1_loss(self.model)
         accuracy = self.accuracy_score(y_out, y)
         self.log('train_loss', loss, on_step=True, on_epoch=True, prog_bar=True)
         self.log('train_acc', accuracy, on_step=True, on_epoch=True, prog_bar=True)
@@ -53,9 +53,9 @@ class BaseExplainer(BaseClassifier):
         x, y = batch
         y_out = self.forward(x)
         if self.loss.__class__.__name__ == 'CrossEntropyLoss':
-            loss = self.loss(y_out, y.argmax(dim=1)) + self.l1 * concept_aware_loss(self.model) #+ 0.00001 * l1_loss(self.model)
+            loss = self.loss(y_out, y.argmax(dim=1)) + self.l1 * entropy_logic_loss(self.model) #+ 0.00001 * l1_loss(self.model)
         else:
-            loss = self.loss(y_out, y) + self.l1 * concept_aware_loss(self.model) #+ 0.00001 * l1_loss(self.model)
+            loss = self.loss(y_out, y) + self.l1 * entropy_logic_loss(self.model) #+ 0.00001 * l1_loss(self.model)
         accuracy = self.accuracy_score(y_out, y)
         self.log('val_loss', loss, on_step=True, on_epoch=True, prog_bar=True)
         self.log('val_acc', accuracy, on_step=True, on_epoch=True, prog_bar=True)
@@ -87,7 +87,7 @@ class MuExplainer(BaseExplainer):
 
         self.temperature = temperature
         self.model_layers = []
-        self.model_layers.append(ConceptAware(n_concepts, explainer_hidden[0], n_classes,
+        self.model_layers.append(EntropyLinear(n_concepts, explainer_hidden[0], n_classes,
                                               temperature, awareness, conceptizator))
         self.model_layers.append(torch.nn.LeakyReLU())
         self.model_layers.append(Dropout())
@@ -182,14 +182,14 @@ class MuExplainer(BaseExplainer):
     # def inspect(self, dataloader):
     #     x, y_out, y_1h = self.transform(dataloader, y_to_one_hot=False)
     #     h_prev = x
-    #     n_layers = len([1 for module in self.model.modules() if isinstance(module, ConceptAware)])-1
+    #     n_layers = len([1 for module in self.model.modules() if isinstance(module, EntropyLinear)])-1
     #     layer_id = 1
     #     plt.figure(figsize=[10, 4])
     #     for module in self.model.modules():
     #         if isinstance(module, nn.Sequential) or isinstance(module, Conceptizator):
     #             continue
     #         h = module(h_prev)
-    #         if isinstance(module, ConceptAware) and not module.top:
+    #         if isinstance(module, EntropyLinear) and not module.top:
     #             plt.subplot(1, n_layers, layer_id)
     #             plt.title(f'Layer {layer_id}')
     #             sns.scatterplot(x=h_prev.view(-1), y=module.conceptizator.concepts.view(-1))
