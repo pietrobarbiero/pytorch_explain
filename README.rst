@@ -1,5 +1,5 @@
-.. image:: https://github.com/pietrobarbiero/pytorch_explain/blob/master/doc/_static/img/pye_logo_text_dark.svg
-    :align: center
+.. image:: https://raw.githubusercontent.com/pietrobarbiero/pytorch_explain/master/doc/_static/img/pye_logo_text_dark.svg
+    :align: right
     :height: 100px
     :scale: 50 %
 

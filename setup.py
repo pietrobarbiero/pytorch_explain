@@ -11,9 +11,9 @@ ver_file = os.path.join('torch_explain', '_version.py')
 with open(ver_file) as f:
     exec(f.read())
 
-DISTNAME = 'Pytorch Explain'
-DESCRIPTION = 'Pytorch Explain.'
-with codecs.open('README.rst', encoding='utf-8-sig') as f:
+DISTNAME = 'torch_explain'
+DESCRIPTION = 'PyTorch Explain: Logic Explained Networks in Python.'
+with codecs.open('README.rst') as f:
     LONG_DESCRIPTION = f.read()
 MAINTAINER = 'P. Barbiero'
 MAINTAINER_EMAIL = 'barbiero@tutanota.com'
@@ -21,7 +21,7 @@ URL = 'https://github.com/pietrobarbiero/pytorch_explain'
 LICENSE = 'Apache 2.0'
 DOWNLOAD_URL = 'https://github.com/pietrobarbiero/pytorch_explain'
 VERSION = __version__
-INSTALL_REQUIRES = ['numpy', 'scipy', 'scikit-learn', 'pandas']
+INSTALL_REQUIRES = ['numpy', 'scipy', 'scikit-learn', 'pandas', 'torch', 'sympy', 'pytorch_lightning']
 CLASSIFIERS = ['Intended Audience :: Science/Research',
                'Intended Audience :: Developers',
                'License :: OSI Approved',
@@ -57,6 +57,7 @@ setup(name=DISTNAME,
       url=URL,
       version=VERSION,
       download_url=DOWNLOAD_URL,
+      long_description_content_type='text/x-rst',
       long_description=LONG_DESCRIPTION,
       zip_safe=False,  # the package can run out of an .egg file
       classifiers=CLASSIFIERS,
