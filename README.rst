@@ -42,6 +42,9 @@
     :alt: PyPI
     :target: https://pypi.org/project/torch-explain/
 
+.. image:: https://zenodo.org/badge/356630474.svg
+   :target: https://zenodo.org/badge/latestdoi/356630474
+
 
 `PyTorch, Explain!` is an extension library for PyTorch to develop
 explainable deep learning models called Logic Explained Networks (LENs).
