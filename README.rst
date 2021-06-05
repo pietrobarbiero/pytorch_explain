@@ -110,8 +110,7 @@ simple explanations:
     for epoch in range(1001):
         optimizer.zero_grad()
         y_pred = model(x_train).squeeze(-1)
-        loss = loss_form(y_pred, y_train) + /
-               0.00001 * te.nn.functional.entropy_logic_loss(model)
+        loss = loss_form(y_pred, y_train) + 0.00001 * te.nn.functional.entropy_logic_loss(model)
         loss.backward()
         optimizer.step()
 
