@@ -1,5 +1,7 @@
-PYTORCH EXPLAIN DOCUMENTATION
-===============================
+.. image:: https://github.com/pietrobarbiero/pytorch_explain/blob/master/doc/_static/img/pye_logo_text_dark.svg
+    :align: center
+    :height: 100px
+    :scale: 50 %
 
 
 |Build|
@@ -45,7 +47,7 @@ required to get first-order logic explanations from deep neural networks.
 Quick start
 -----------
 
-You can install Deep Logic along with all its dependencies from
+You can install ``torch_explain`` along with all its dependencies from
 `PyPI <https://pypi.org/project/pytorch_explain/>`__:
 
 .. code:: bash

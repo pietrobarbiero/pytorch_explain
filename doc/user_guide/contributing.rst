@@ -1,5 +1,5 @@
-Contributing to Deep Logic
-============================
+Contributing to Pytorch Explain
+================================
 
 First off, thanks for taking the time to contribute! :+1:
 
