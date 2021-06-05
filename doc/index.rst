@@ -10,7 +10,7 @@ required to get first-order logic explanations from deep neural networks.
 Quick start
 -----------
 
-You can install Deep Logic along with all its dependencies from
+You can install ``torch_explain`` along with all its dependencies from
 `PyPI <https://pypi.org/project/torch_explain/>`__:
 
 .. code:: bash
