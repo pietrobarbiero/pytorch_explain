@@ -10,54 +10,27 @@ Quick start
 -----------
 
 You can install Deep Logic along with all its dependencies from
-`PyPI <https://pypi.org/project/deep-logic/>`__:
+`PyPI <https://pypi.org/project/torch_explain/>`__:
 
 .. code:: bash
 
-    pip install -r requirements.txt deep-logic
+    pip install -r requirements.txt torch_explain
 
 
-Source
-------
+Experiments
+------------
 
-The source code and minimal working examples can be found on
-`GitHub <https://github.com/pietrobarbiero/deep-logic>`__.
+Training
+~~~~~~~~~~
 
+To train the model(s) in the paper, run the scripts and notebooks inside the folder `experiments`.
 
-.. toctree::
-    :caption: User Guide
-    :maxdepth: 2
+Results
+~~~~~~~~~~
 
-    user_guide/installation
-    user_guide/tutorial_deepnn
-    user_guide/tutorial_psi
-    user_guide/contributing
-    user_guide/running_tests
+Results on test set and logic formulas will be saved in the folder `experiments/results`.
 
-.. toctree::
-    :caption: API Reference
-    :maxdepth: 2
+Data
+~~~~~~~~~~
 
-    modules/logic/relu_nn
-    modules/logic/psi_nn
-    modules/nn/linear
-    modules/utils/base
-    modules/utils/relu_nn
-    modules/utils/psi_nn
-    modules/utils/selection
-
-
-.. toctree::
-    :caption: Copyright
-    :maxdepth: 1
-
-    user_guide/authors
-    user_guide/licence
-
-
-Indices and tables
-~~~~~~~~~~~~~~~~~~
-
-* :ref:`genindex`
-* :ref:`modindex`
-* :ref:`search`
+The original datasets can be downloaded from the links provided in the supplementary material of the paper.

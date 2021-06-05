@@ -1,11 +1,6 @@
-from .base import BaseClassifier
-from .blackbox import BlackBoxSimple, BlackBoxResNet18
-from .explainer import BaseExplainer, MuExplainer
+from .explainer import BaseExplainer, Explainer
 
 __all__ = [
     'BaseExplainer',
-    'MuExplainer',
-    'BaseClassifier',
-    'BlackBoxSimple',
-    'BlackBoxResNet18',
+    'Explainer',
 ]

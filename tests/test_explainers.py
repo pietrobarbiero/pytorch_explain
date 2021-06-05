@@ -3,59 +3,68 @@ import unittest
 
 import torch
 from pytorch_lightning.callbacks import ModelCheckpoint
-from sklearn.metrics import accuracy_score
 from torch.nn.functional import one_hot
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, TensorDataset
 from pytorch_lightning import Trainer, seed_everything
 
-from torch_explain.logic import test_explanation, complexity
-from torch_explain.models.explainer import MuExplainer
+from torch_explain.models.explainer import Explainer
 
 
 class TestTemplateObject(unittest.TestCase):
     def test_mu_classifier(self):
-        seed_everything(42)
-        # data
-        train_data = torch.load('../experiments/data/MNIST_X_to_C/c2y_training.pt')
-        val_data = torch.load('../experiments/data/MNIST_X_to_C/c2y_validation.pt')
-        test_data = torch.load('../experiments/data/MNIST_X_to_C/c2y_test.pt')
-        train_data.tensors = ((train_data.tensors[0]).to(torch.float),
-                            (one_hot((train_data.tensors[1].argmax(dim=1) % 2 == 1).to(torch.long)).to(torch.float)))
-        val_data.tensors = ((val_data.tensors[0]).to(torch.float),
-                            (one_hot((val_data.tensors[1].argmax(dim=1) % 2 == 1).to(torch.long)).to(torch.float)))
-        test_data.tensors = ((test_data.tensors[0]).to(torch.float),
-                             (one_hot((test_data.tensors[1].argmax(dim=1) % 2 == 1).to(torch.long)).to(torch.float)))
-        # val_data.tensors = (torch.cat((val_data.tensors[1], torch.zeros((val_data.tensors[1].shape[0], 2))), 1),
-        #                     (one_hot((val_data.tensors[1].argmax(dim=1) % 2 == 1).to(torch.long)).to(torch.float)))
-        # test_data.tensors = (torch.cat((test_data.tensors[1], torch.zeros((test_data.tensors[1].shape[0], 2))), 1),
-        #                      (one_hot((test_data.tensors[1].argmax(dim=1) % 2 == 1).to(torch.long)).to(torch.float)))
-        # train_loader = DataLoader(train_data, batch_size=180)
-        val_loader = DataLoader(val_data, batch_size=180)
-        test_loader = DataLoader(test_data, batch_size=180)
+        for i in range(1):
+            seed_everything(i)
 
-        # model
-        base_dir = f'../experiments/results/MNIST/explainer'
-        os.makedirs(base_dir, exist_ok=True)
+            # XOR problem
+            x0 = torch.zeros((4, 100))
+            x = torch.tensor([
+                [0, 0, 0],
+                [0, 1, 0],
+                [1, 0, 0],
+                [1, 1, 0],
+            ], dtype=torch.float)
+            x = torch.cat([x, x0], dim=1)
+            y = torch.tensor([0, 1, 1, 0], dtype=torch.long)
+            y1h = one_hot(y)
+            data = TensorDataset(x, y1h)
+            train_loader = DataLoader(data, batch_size=10)
+            val_loader = DataLoader(data, batch_size=10)
+            test_loader = DataLoader(data, batch_size=10)
 
-        # training
-        checkpoint_callback = ModelCheckpoint(dirpath=base_dir, monitor='val_loss', save_top_k=1)
-        trainer = Trainer(max_epochs=20, gpus=1, auto_lr_find=True, deterministic=True,
-                          check_val_every_n_epoch=1, default_root_dir=base_dir,
-                          weights_save_path=base_dir, profiler="simple",
-                          callbacks=[checkpoint_callback])
+            # make dirs to save results
+            base_dir = f'../experiments/results/test/explainer'
+            os.makedirs(base_dir, exist_ok=True)
 
-        model = MuExplainer(n_concepts=10, n_classes=2, l1=0.0000001, temperature=5, lr=0.01,
-                            explainer_hidden=[10], conceptizator='identity')
-        trainer.fit(model, val_loader, val_loader)
+            # train
+            checkpoint_callback = ModelCheckpoint(dirpath=base_dir, monitor='val_loss', save_top_k=1)
+            trainer = Trainer(max_epochs=100, gpus=1, auto_lr_find=True, deterministic=True,
+                              check_val_every_n_epoch=1, default_root_dir=base_dir,
+                              weights_save_path=base_dir, callbacks=[checkpoint_callback])
+            model = Explainer(n_concepts=x.shape[1], n_classes=2, l1=0.001, temperature=0.6, lr=0.01,
+                              explainer_hidden=[10, 10], conceptizator='identity_bool')
+            trainer.fit(model, train_loader, val_loader)
 
-        model.freeze()
-        trainer.test(model, test_dataloaders=test_loader)
-        results, results_full = model.explain_class(val_loader, val_loader, test_loader, topk_explanations=5,
-                                                    x_to_bool=None, max_accuracy=True)
-        print(results)
-        print(results_full[0]['explanation'])
-        print(model.model[0].alpha / model.model[0].alpha.max(dim=1)[0].unsqueeze(1))
-        assert results_full[0]['explanation'] == '(feature0000000000 & ~feature0000000001 & ~feature0000000002 & ~feature0000000003 & ~feature0000000004 & ~feature0000000005 & ~feature0000000006 & ~feature0000000007 & ~feature0000000008 & ~feature0000000009) | (feature0000000002 & ~feature0000000000 & ~feature0000000001 & ~feature0000000003 & ~feature0000000004 & ~feature0000000005 & ~feature0000000006 & ~feature0000000007 & ~feature0000000008 & ~feature0000000009) | (feature0000000004 & ~feature0000000000 & ~feature0000000001 & ~feature0000000002 & ~feature0000000003 & ~feature0000000005 & ~feature0000000006 & ~feature0000000007 & ~feature0000000008 & ~feature0000000009) | (feature0000000006 & ~feature0000000000 & ~feature0000000001 & ~feature0000000002 & ~feature0000000003 & ~feature0000000004 & ~feature0000000005 & ~feature0000000007 & ~feature0000000008 & ~feature0000000009) | (feature0000000008 & ~feature0000000000 & ~feature0000000001 & ~feature0000000002 & ~feature0000000003 & ~feature0000000004 & ~feature0000000005 & ~feature0000000006 & ~feature0000000007 & ~feature0000000009)'
+            # test
+            model.freeze()
+            trainer.test(model, test_dataloaders=test_loader)
+
+            # explain
+            results_avg, results_details = model.explain_class(train_loader, val_loader, test_loader)
+            print(results_avg)
+            print(results_details)
+            assert results_avg == {'explanation_accuracy': 1.0, 'explanation_fidelity': 1.0, 'explanation_complexity': 4.0}
+            assert results_details == [
+                {'target_class': 0,
+                 'explanation': '(feature0000000000 & feature0000000001) | (~feature0000000000 & ~feature0000000001)',
+                 'explanation_accuracy': 1.0,
+                 'explanation_fidelity': 1.0,
+                 'explanation_complexity': 4},
+                {'target_class': 1,
+                 'explanation': '(feature0000000000 & ~feature0000000001) | (feature0000000001 & ~feature0000000000)',
+                 'explanation_accuracy': 1.0,
+                 'explanation_fidelity': 1.0,
+                 'explanation_complexity': 4}
+            ]
 
 
 if __name__ == '__main__':

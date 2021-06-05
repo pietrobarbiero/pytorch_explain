@@ -4,56 +4,46 @@ import sympy
 
 import torch
 import numpy as np
-from sklearn.metrics import accuracy_score, f1_score
+from sklearn.metrics import f1_score
 from sympy import to_dnf, lambdify
 
 
-def test_explanation(explanation: str, target_class: int, x: torch.Tensor, y: torch.Tensor,
-                     give_local: bool = False, metric: callable = accuracy_score, concept_names: list = None) \
-        -> Tuple[float, np.ndarray]:
+def test_explanation(formula: str, x: torch.Tensor, y: torch.Tensor, target_class: int):
     """
-    Test explanation
+    Tests a logic formula.
 
-    :param explanation: formula
-    :param target_class: class ID
+    :param formula: logic formula
     :param x: input data
-    :param y: input labels (categorical, NOT one-hot encoded)
-    :param give_local: if true will return local predictions
+    :param y: input labels (MUST be one-hot encoded)
+    :param target_class: target class
     :return: Accuracy of the explanation and predictions
     """
 
-    assert concept_names is not None or "feature" in explanation or explanation == "", \
-        "Concept names must be given when present in the formula"
+    if formula in ['True', 'False', ''] or formula is None:
+        return 0.0, None
 
-    if explanation == '' or explanation == None:
-        local_predictions = [torch.empty_like(y)]
-        predictions = torch.cat(local_predictions).eq(target_class).cpu().detach().numpy()
-        accuracy = 0.0
-        return accuracy, torch.stack(local_predictions, dim=0).sum(dim=0) > 0 if give_local else predictions
-    if explanation == "(True)" or explanation == "True":
-        local_predictions = [torch.tensor(np.ones_like(y))]
-        predictions = torch.cat(local_predictions).eq(target_class).cpu().detach().numpy()
-    elif explanation == "(False)" or explanation == "False":
-        local_predictions = [torch.tensor(np.zeros_like(y))]
-        predictions = torch.cat(local_predictions).eq(target_class).cpu().detach().numpy()
     else:
-
+        assert len(y.shape) == 2
+        y = y[:, target_class]
         concept_list = [f"feature{i:010}" for i in range(x.shape[1])]
-        if concept_names is not None:
-            for i, concept_name in enumerate(concept_names):
-                explanation = explanation.replace(concept_name, f"feature{i:010}")
-
-        explanation = to_dnf(explanation)
+        # get predictions using sympy
+        explanation = to_dnf(formula)
         fun = lambdify(concept_list, explanation, 'numpy')
         x = x.cpu().detach().numpy()
         predictions = fun(*[x[:, i] > 0.5 for i in range(x.shape[1])])
+        # get accuracy
+        accuracy = f1_score(y, predictions, average='macro')
+        return accuracy, predictions
 
-    # accuracy = metric(y, predictions)
-    accuracy = f1_score(y, predictions, average='macro')
-    return accuracy, predictions
 
+def complexity(formula: str, to_dnf: bool = False) -> float:
+    """
+    Estimates the complexity of the formula.
 
-def complexity(formula: str, to_dnf=False) -> float:
+    :param formula: logic formula.
+    :param to_dnf: whether to convert the formula in disjunctive normal form.
+    :return: The complexity of the formula.
+    """
     if formula != "" and formula is not None:
         if to_dnf:
             formula = str(sympy.to_dnf(formula))
@@ -62,11 +52,23 @@ def complexity(formula: str, to_dnf=False) -> float:
 
 
 def concept_consistency(formula_list: List[str]) -> dict:
+    """
+    Computes the frequency of concepts in a list of logic formulas.
+
+    :param formula_list: list of logic formulas.
+    :return: Frequency of concepts.
+    """
     concept_dict = _generate_consistency_dict(formula_list)
     return {k: v / len(formula_list) for k, v in concept_dict.items()}
 
 
 def formula_consistency(formula_list: List[str]) -> float:
+    """
+    Computes the average frequency of concepts in a list of logic formulas.
+
+    :param formula_list: list of logic formulas.
+    :return: Average frequency of concepts.
+    """
     concept_dict = _generate_consistency_dict(formula_list)
     concept_consistency = np.array([c for c in concept_dict.values()]) / len(formula_list)
     return concept_consistency.mean()

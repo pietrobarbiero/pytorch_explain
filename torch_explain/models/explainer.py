@@ -2,31 +2,33 @@ from abc import abstractmethod
 from typing import List, Union
 
 import torch
-from sklearn.metrics import accuracy_score, f1_score
+from sklearn.metrics import f1_score, accuracy_score
 from torch import nn
 import torch.nn.functional as F
-from torch.nn import Dropout
+from torch.nn import Dropout, Linear
 from torch.nn.modules.loss import _Loss
 from torch.optim import AdamW
 from torch.utils.data import DataLoader
-from torchvision.datasets import MNIST
-import matplotlib.pyplot as plt
-import seaborn as sns
 import numpy as np
+import pytorch_lightning as pl
 
 from torch_explain.logic.nn import explain_class
 from torch_explain.logic.metrics import test_explanation, complexity
-from torch_explain.models.base import task_accuracy, BaseClassifier, concept_accuracy
-from torch_explain.nn import Conceptizator
-from torch_explain.nn.functional import l1_loss, entropy_logic_loss
-from torch_explain.nn.logic import EntropyLinear, LinearIndependent
+from torch_explain.nn.functional import entropy_logic_loss
+from torch_explain.nn.logic import EntropyLinear
 
 
-class BaseExplainer(BaseClassifier):
+class BaseExplainer(pl.LightningModule):
     def __init__(self, n_concepts: int, n_classes: int, optimizer: str = 'adamw', loss: _Loss = nn.NLLLoss(),
-                 lr: float = 1e-2, activation: callable = F.log_softmax, accuracy_score: callable = concept_accuracy,
+                 lr: float = 1e-2, activation: callable = F.log_softmax,
                  explainer_hidden: list = (10, 10), l1: float = 1e-5):
-        super().__init__(n_classes, optimizer, loss, lr, activation, accuracy_score)
+        super().__init__()
+        self.n_classes = n_classes
+        self.loss = loss
+        self.optmizer = optimizer
+        self.lr = lr
+        self.activation = activation
+        self.model = None
         self.n_concepts = n_concepts
         self.model_hidden = explainer_hidden
         self.l1 = l1
@@ -34,17 +36,17 @@ class BaseExplainer(BaseClassifier):
         self.save_hyperparameters()
 
     def forward(self, x):
-        y_out = self.model(x)
+        y_out = self.model(x).squeeze(-1)
         return y_out
 
     def training_step(self, batch, batch_idx):
         x, y = batch
         y_out = self.forward(x)
         if self.loss.__class__.__name__ == 'CrossEntropyLoss':
-            loss = self.loss(y_out, y.argmax(dim=1)) + self.l1 * entropy_logic_loss(self.model) #+ 0.00001 * l1_loss(self.model)
+            loss = self.loss(y_out, y.argmax(dim=1)) + self.l1 * entropy_logic_loss(self.model)
         else:
-            loss = self.loss(y_out, y) + self.l1 * entropy_logic_loss(self.model) #+ 0.00001 * l1_loss(self.model)
-        accuracy = self.accuracy_score(y_out, y)
+            loss = self.loss(y_out, y) + self.l1 * entropy_logic_loss(self.model)
+        accuracy = _task_accuracy(y_out, y)
         self.log('train_loss', loss, on_step=True, on_epoch=True, prog_bar=True)
         self.log('train_acc', accuracy, on_step=True, on_epoch=True, prog_bar=True)
         return loss
@@ -53,10 +55,10 @@ class BaseExplainer(BaseClassifier):
         x, y = batch
         y_out = self.forward(x)
         if self.loss.__class__.__name__ == 'CrossEntropyLoss':
-            loss = self.loss(y_out, y.argmax(dim=1)) + self.l1 * entropy_logic_loss(self.model) #+ 0.00001 * l1_loss(self.model)
+            loss = self.loss(y_out, y.argmax(dim=1)) + self.l1 * entropy_logic_loss(self.model)
         else:
-            loss = self.loss(y_out, y) + self.l1 * entropy_logic_loss(self.model) #+ 0.00001 * l1_loss(self.model)
-        accuracy = self.accuracy_score(y_out, y)
+            loss = self.loss(y_out, y) + self.l1 * entropy_logic_loss(self.model)
+        accuracy = _task_accuracy(y_out, y)
         self.log('val_loss', loss, on_step=True, on_epoch=True, prog_bar=True)
         self.log('val_acc', accuracy, on_step=True, on_epoch=True, prog_bar=True)
         return loss
@@ -64,7 +66,7 @@ class BaseExplainer(BaseClassifier):
     def test_step(self, batch, batch_idx):
         x, y = batch
         y_out = self.forward(x)
-        accuracy = self.accuracy_score(y_out, y)
+        accuracy = _task_accuracy(y_out, y)
         self.log('test_acc', accuracy, on_step=True, on_epoch=True, prog_bar=True)
         return accuracy
 
@@ -77,28 +79,24 @@ class BaseExplainer(BaseClassifier):
         pass
 
 
-class MuExplainer(BaseExplainer):
+class Explainer(BaseExplainer):
     def __init__(self, n_concepts: int, n_classes: int, optimizer: str = 'adamw', loss: _Loss = nn.CrossEntropyLoss(),
-                 lr: float = 1e-2, activation: callable = F.log_softmax, accuracy_score: callable = task_accuracy,
-                 explainer_hidden: list = (8, 3), l1: float = 1e-5, temperature: float = 0.6,
-                 awareness: str = 'entropy', conceptizator: str = 'identity_bool'):
-        super().__init__(n_concepts, n_classes, optimizer, loss, lr, activation,
-                         accuracy_score, explainer_hidden, l1)
+                 lr: float = 1e-2, activation: callable = F.log_softmax, explainer_hidden: list = (8, 3),
+                 l1: float = 1e-5, temperature: float = 0.6, conceptizator: str = 'identity_bool'):
+        super().__init__(n_concepts, n_classes, optimizer, loss, lr, activation, explainer_hidden, l1)
 
         self.temperature = temperature
         self.model_layers = []
         self.model_layers.append(EntropyLinear(n_concepts, explainer_hidden[0], n_classes,
-                                              temperature, awareness, conceptizator))
+                                               temperature, conceptizator=conceptizator))
         self.model_layers.append(torch.nn.LeakyReLU())
-        self.model_layers.append(Dropout())
+        # self.model_layers.append(Dropout())
         for i in range(1, len(explainer_hidden)):
-            self.model_layers.append(LinearIndependent(explainer_hidden[i - 1], explainer_hidden[i], n_classes))
+            self.model_layers.append(Linear(explainer_hidden[i - 1], explainer_hidden[i]))
             self.model_layers.append(torch.nn.LeakyReLU())
-            self.model_layers.append(Dropout())
+            # self.model_layers.append(Dropout())
 
-        self.model_layers.append(LinearIndependent(explainer_hidden[-1], 1, n_classes, top=True))
-        # self.model_layers.append(torch.nn.LogSoftmax(dim=1))
-
+        self.model_layers.append(Linear(explainer_hidden[-1], 1))
         self.model = torch.nn.Sequential(*self.model_layers)
 
         self.save_hyperparameters()
@@ -138,20 +136,18 @@ class MuExplainer(BaseExplainer):
         result_list = []
         exp_accuracy, exp_fidelity, exp_complexity = [], [], []
         for target_class in target_classes:
-            class_explanation, explanations, explanation_raw = explain_class(self.model.cpu(),
-                                                                             x_train, y_train_1h,
-                                                                             x_val, y_val_1h,
-                                                                             target_class=target_class,
-                                                                             topk_explanations=topk_explanations,
-                                                                             max_minterm_complexity=max_minterm_complexity,
-                                                                             concept_names=concept_names,
-                                                                             max_accuracy=max_accuracy)
+            class_explanation, explanation_raw = explain_class(self.model.cpu(),
+                                                               x_train, y_train_1h,
+                                                               x_val, y_val_1h,
+                                                               target_class=target_class,
+                                                               topk_explanations=topk_explanations,
+                                                               max_minterm_complexity=max_minterm_complexity,
+                                                               concept_names=concept_names,
+                                                               max_accuracy=max_accuracy)
             if class_explanation:
                 metric = f1_score
                 metric.__setattr__('average', 'macro')
-                explanation_accuracy, y_formula = test_explanation(explanation_raw, target_class=target_class,
-                                                       x=x_test, y=y_test_1h[:, target_class], metric=f1_score) # FIXME: macro F1
-                                                       # x=x_val, y=y_val_1h[:, target_class])
+                explanation_accuracy, y_formula = test_explanation(explanation_raw, x_test, y_test_1h, target_class)
                 # explanation_fidelity = accuracy_score(y_test_out[:, target_class] > 0.5, y_formula)
                 explanation_fidelity = accuracy_score(y_test_out.argmax(dim=1).eq(target_class), y_formula)
                 # explanation_fidelity = accuracy_score(y_val_out.argmax(dim=1).eq(target_class), y_formula)
@@ -179,31 +175,6 @@ class MuExplainer(BaseExplainer):
         }
         return avg_results, result_list
 
-    # def inspect(self, dataloader):
-    #     x, y_out, y_1h = self.transform(dataloader, y_to_one_hot=False)
-    #     h_prev = x
-    #     n_layers = len([1 for module in self.model.modules() if isinstance(module, EntropyLinear)])-1
-    #     layer_id = 1
-    #     plt.figure(figsize=[10, 4])
-    #     for module in self.model.modules():
-    #         if isinstance(module, nn.Sequential) or isinstance(module, Conceptizator):
-    #             continue
-    #         h = module(h_prev)
-    #         if isinstance(module, EntropyLinear) and not module.top:
-    #             plt.subplot(1, n_layers, layer_id)
-    #             plt.title(f'Layer {layer_id}')
-    #             sns.scatterplot(x=h_prev.view(-1), y=module.conceptizator.concepts.view(-1))
-    #             layer_id += 1
-    #         h_prev = h
-    #     plt.tight_layout()
-    #     plt.show()
-    #     return
 
-
-class MNIST_C_to_Y(MNIST):
-
-    def __getitem__(self, index: int):
-        target = int(self.targets[index])
-        target1h = torch.zeros(10)
-        target1h[target] = 1
-        return target1h, torch.tensor(target % 2 == 1, dtype=torch.long)
+def _task_accuracy(y_out, y):
+    return y_out.argmax(dim=1).eq(y.argmax(dim=1)).sum() / len(y)
