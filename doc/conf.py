@@ -21,7 +21,7 @@ import torch_explain
 
 # -- Project information -----------------------------------------------------
 
-project = 'pytorch_geometric'
+project = 'pytorch_explain'
 author = 'Pietro Barbiero'
 copyright = '{}, {}'.format(datetime.datetime.now().year, author)
 
@@ -54,7 +54,7 @@ exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 #
 # html_theme = 'alabaster'
 html_theme = "sphinx_rtd_theme"
-html_logo = '_static/img/pyg_logo_text.svg'
+html_logo = './_static/img/pye_logo_text.svg'
 
 html_theme_options = {
     'canonical_url': 'https://pytorch_explain.readthedocs.io/en/latest/',
@@ -67,7 +67,7 @@ html_theme_options = {
     'sticky_navigation': True,
     'navigation_depth': 4,
     'includehidden': True,
-    'titles_only': False
+    'titles_only': False,
 }
 
 
