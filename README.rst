@@ -35,12 +35,12 @@
     :alt: Requires.io
     :target: https://requires.io/github/pietrobarbiero/pytorch_explain/requirements/?branch=master
 
-.. |PyPI license| image:: https://img.shields.io/pypi/l/pytorch_explain.svg?style=for-the-badge
-   :target: https://pypi.python.org/pypi/pytorch_explain/
+.. |PyPI license| image:: https://img.shields.io/pypi/l/torch_explain.svg?style=for-the-badge
+   :target: https://pypi.org/project/torch-explain/
 
-.. |PyPI-version| image:: https://img.shields.io/pypi/v/pytorch_explain?style=for-the-badge
+.. |PyPI-version| image:: https://img.shields.io/pypi/v/torch_explain?style=for-the-badge
     :alt: PyPI
-    :target: https://pypi.python.org/pypi/pytorch_explain/
+    :target: https://pypi.org/project/torch-explain/
 
 
 `PyTorch, Explain!` is an extension library for PyTorch to develop
