@@ -25,7 +25,7 @@ with 3 layers using the ``EntropyLayer`` as the first one:
 .. code:: python
 
     layers = [
-        te.nn.EntropyLinear(x.shape[1], 10, n_classes=2),
+        te.nn.EntropyLinear(x_train.shape[1], 10, n_classes=2),
         torch.nn.LeakyReLU(),
         torch.nn.Linear(10, 4),
         torch.nn.LeakyReLU(),
@@ -44,8 +44,8 @@ simple explanations:
     model.train()
     for epoch in range(1001):
         optimizer.zero_grad()
-        y_pred = model(x).squeeze(-1)
-        loss = loss_form(y_pred, y) + /
+        y_pred = model(x_train).squeeze(-1)
+        loss = loss_form(y_pred, y_train) + /
                0.00001 * te.nn.functional.entropy_logic_loss(model)
         loss.backward()
         optimizer.step()
@@ -55,8 +55,11 @@ how the network composed the input features to obtain the predictions:
 
 .. code:: python
 
-    y1h = one_hot(y)
-    explanation, _ = explain_class(model, x, y1h, x, y1h, target_class=1)
+    from torch_explain.logic import explain_class
+    from torch.nn.functional import one_hot
+
+    y1h = one_hot(y_train)
+    explanation, _ = explain_class(model, x_train, y1h, x_train, y1h, target_class=1)
 
 Explanations will be logic formulas in disjunctive normal form.
 In this case, the explanation will be ``y=1 IFF (f1 AND ~f2) OR (f2  AND ~f1)``

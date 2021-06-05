@@ -15,7 +15,7 @@ You can install ``torch_explain`` along with all its dependencies from
 
 .. code:: bash
 
-    pip install -r requirements.txt torch_explain
+    pip install -r requirements.txt torch-explain
 
 
 Source
