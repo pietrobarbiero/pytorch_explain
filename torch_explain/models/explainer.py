@@ -12,7 +12,7 @@ from torch.utils.data import DataLoader
 import numpy as np
 import pytorch_lightning as pl
 
-from torch_explain.logic.nn import explain_class
+from torch_explain.logic.nn.entropy import explain_class
 from torch_explain.logic.metrics import test_explanation, complexity
 from torch_explain.nn.functional import entropy_logic_loss
 from torch_explain.nn.logic import EntropyLinear

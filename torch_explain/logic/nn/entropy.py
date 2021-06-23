@@ -26,7 +26,7 @@ def explain_class(model: torch.nn.Module, x, y1h, x_val: torch.Tensor, y_val1h: 
     :param topk_explanations: number of local explanations to be combined.
     :param max_accuracy: if True a formula is simplified only if the simplified formula gets 100% accuracy.
     :param concept_names: list containing the names of the input concepts.
-    :return: Local explanation
+    :return: Global explanation
     """
     x_correct, y_correct1h = _get_correct_data(x, y1h, model, target_class)
     if x_correct is None:

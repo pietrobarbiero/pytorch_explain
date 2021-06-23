@@ -129,6 +129,17 @@ Explanations will be logic formulas in disjunctive normal form.
 In this case, the explanation will be ``y=1 IFF (f1 AND ~f2) OR (f2  AND ~f1)``
 corresponding to ``y=1 IFF f1 XOR f2``.
 
+The quality of the logic explanation can **quantitatively** assessed in terms
+of classification accuracy and rule complexity as follows:
+
+.. code:: python
+    from torch_explain.logic.metrics import test_explanation, complexity
+
+    accuracy, preds = test_explanation(explanation, x_train, y1h, target_class=1)
+    explanation_complexity = complexity(explanation)
+
+In this case the accuracy is 100% and the complexity is 4.
+
 
 Experiments
 ------------
@@ -153,7 +164,16 @@ Theory
 --------
 Theoretical foundations can be found in the following papers.
 
-Learning of constraints::
+Entropy-based LENs::
+
+    @article{barbiero2021entropy,
+      title={Entropy-based Logic Explanations of Neural Networks},
+      author={Barbiero, Pietro and Ciravegna, Gabriele and Giannini, Francesco and Li{\'o}, Pietro and Gori, Marco and Melacci, Stefano},
+      journal={arXiv preprint arXiv:2106.06804},
+      year={2021}
+    }
+
+:math:`\psi` network ("learning of constraints")::
 
     @inproceedings{ciravegna2020constraint,
       title={A Constraint-Based Approach to Learning and Explanation.},

@@ -1,4 +1,4 @@
-Loss function to regularize the neural model
+Loss functions to regularize the neural model
 ==============================================
 
 :mod:`torch_explain.nn.functional.loss`

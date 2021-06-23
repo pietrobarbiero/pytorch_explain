@@ -38,11 +38,13 @@ The source code and minimal working examples can be found on
     :caption: API Reference
     :maxdepth: 2
 
-    modules/logic/nn
+    modules/logic/nn/entropy
+    modules/logic/nn/psi
     modules/logic/metrics
     modules/logic/utils
     modules/nn/logic
     modules/nn/functional/loss
+    modules/nn/functional/prune
     modules/nn/concepts
     modules/models/explainer
 
@@ -67,7 +69,17 @@ Theory
 --------
 Theoretical foundations can be found in the following papers.
 
-Learning of constraints::
+Entropy-based LENs::
+
+    @article{barbiero2021entropy,
+      title={Entropy-based Logic Explanations of Neural Networks},
+      author={Barbiero, Pietro and Ciravegna, Gabriele and Giannini, Francesco and Li{\'o}, Pietro and Gori, Marco and Melacci, Stefano},
+      journal={arXiv preprint arXiv:2106.06804},
+      year={2021}
+    }
+
+
+:math:`\psi` network ("learning of constraints")::
 
     @inproceedings{ciravegna2020constraint,
       title={A Constraint-Based Approach to Learning and Explanation.},

@@ -1,4 +1,5 @@
 import torch
+from torch.nn import Linear
 
 from torch_explain.nn.logic import EntropyLinear
 
@@ -27,7 +28,7 @@ def l1_loss(model: torch.nn.Module):
     """
     loss = 0
     for module in model.children():
-        if isinstance(module, EntropyLinear):
+        if isinstance(module, Linear):
             loss += torch.norm(module.weight, 1)
             break
     return loss
