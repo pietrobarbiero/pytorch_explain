@@ -119,11 +119,11 @@ how the network composed the input features to obtain the predictions:
 
 .. code:: python
 
-    from torch_explain.logic import explain_class
+    from torch_explain.logic.nn import entropy
     from torch.nn.functional import one_hot
 
     y1h = one_hot(y_train)
-    explanation, _ = explain_class(model, x_train, y1h, x_train, y1h, target_class=1)
+    explanation, _ = entropy.explain_class(model, x_train, y1h, x_train, y1h, target_class=1)
 
 Explanations will be logic formulas in disjunctive normal form.
 In this case, the explanation will be ``y=1 IFF (f1 AND ~f2) OR (f2  AND ~f1)``
