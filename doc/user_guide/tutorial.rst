@@ -71,6 +71,7 @@ The quality of the logic explanation can **quantitatively** assessed in terms
 of classification accuracy and rule complexity as follows:
 
 .. code:: python
+
     from torch_explain.logic.metrics import test_explanation, complexity
 
     accuracy, preds = test_explanation(explanation, x_train, y1h, target_class=1)
@@ -151,6 +152,7 @@ The quality of the logic explanation can **quantitatively** assessed in terms
 of classification accuracy and rule complexity as follows:
 
 .. code:: python
+
     from torch_explain.logic.metrics import test_explanation, complexity
 
     accuracy, preds = test_explanation(explanation, x_train, y1h, target_class=1)
