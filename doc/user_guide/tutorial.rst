@@ -105,7 +105,7 @@ with 3 layers using **sigmoid activation functions only**:
 .. code:: python
 
     layers = [
-        torch.nn.Linear(x.shape[1], 10),
+        torch.nn.Linear(x_train.shape[1], 10),
         torch.nn.Sigmoid(),
         torch.nn.Linear(10, 5),
         torch.nn.Sigmoid(),
@@ -126,8 +126,8 @@ to simplify the internal architecture (here pruning happens at epoch 1000):
     model.train()
     for epoch in range(6001):
         optimizer.zero_grad()
-        y_pred = model(x)
-        loss = loss_form(y_pred, y) + 0.000001 * te.nn.functional.l1_loss(model)
+        y_pred = model(x_train)
+        loss = loss_form(y_pred, y_train) + 0.000001 * te.nn.functional.l1_loss(model)
         loss.backward()
         optimizer.step()
 
