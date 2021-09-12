@@ -12,18 +12,18 @@ class Conceptizator(Module):
         self.concepts = None
         self.activation_name = activation
         self.activation = torch.sigmoid
-        if self.activation_name == 'sigmoid':
-            self.activation = torch.sigmoid
-            self.threshold = 0.5
-        if self.activation_name == 'relu':
-            self.activation = torch.relu
-            self.threshold = 0.
-        if self.activation_name == 'leaky_relu':
-            self.activation = torch.nn.functional.leaky_relu
-            self.threshold = 0.
-        if self.activation_name == 'identity':
-            self.activation = identity
-            self.threshold = 0.
+        # if self.activation_name == 'sigmoid':
+        #     self.activation = torch.sigmoid
+        #     self.threshold = 0.5
+        # if self.activation_name == 'relu':
+        #     self.activation = torch.relu
+        #     self.threshold = 0.
+        # if self.activation_name == 'leaky_relu':
+        #     self.activation = torch.nn.functional.leaky_relu
+        #     self.threshold = 0.
+        # if self.activation_name == 'identity':
+        #     self.activation = identity
+        #     self.threshold = 0.
         if self.activation_name == 'identity_bool':
             self.activation = identity
             self.threshold = 0.5

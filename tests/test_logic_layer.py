@@ -5,7 +5,7 @@ from pytorch_lightning import seed_everything
 from torch.nn.functional import one_hot
 
 import torch_explain as te
-from torch_explain.logic.metrics import test_explanation, complexity
+from torch_explain.logic.metrics import test_explanation, complexity, concept_consistency, formula_consistency
 from torch_explain.logic.nn import entropy, psi
 from torch_explain.nn.functional import prune_equal_fanin
 
@@ -55,8 +55,12 @@ class TestTemplateObject(unittest.TestCase):
 
             explanation = psi.explain_class(model, x)
             explanation_complexity = complexity(explanation)
+            cc = concept_consistency([explanation])
+            fc = formula_consistency([explanation])
             print(explanation)
             print(explanation_complexity)
+            print(cc)
+            print(fc)
             assert explanation == '(feature0000000000 & ~feature0000000001) | (feature0000000001 & ~feature0000000000)'
             accuracy, preds = test_explanation(explanation, x, y1h, target_class=1)
             print(f'Accuracy: {100*accuracy:.2f}%')
