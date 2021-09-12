@@ -187,14 +187,14 @@ def _local_explanation(module, feature_names, neuron_id, neuron_explanations_raw
 
 
 def _get_correct_data(x, y, model, target_class):
-    x_target = x[y.argmax(dim=1) == target_class]
-    y_target = y[y.argmax(dim=1) == target_class]
+    x_target = x[y[:, target_class] == 1]
+    y_target = y[y[:, target_class] == 1]
 
     # get model's predictions
     preds = model(x_target).squeeze(-1)
 
     # identify samples correctly classified of the target class
-    correct_mask = y_target.argmax(dim=1).eq(preds.argmax(dim=1))
+    correct_mask = y_target[:, target_class].eq(preds[:, target_class]>0.5)
     if sum(correct_mask) < 2:
         return None, None
 
@@ -202,12 +202,12 @@ def _get_correct_data(x, y, model, target_class):
     y_target_correct = y_target[correct_mask]
 
     # collapse samples having the same boolean values and class label different from the target class
-    x_reduced_opposite = x[y.argmax(dim=1) != target_class]
-    y_reduced_opposite = y[y.argmax(dim=1) != target_class]
+    x_reduced_opposite = x[y[:, target_class] != 1]
+    y_reduced_opposite = y[y[:, target_class] != 1]
     preds_opposite = model(x_reduced_opposite).squeeze(-1)
 
     # identify samples correctly classified of the opposite class
-    correct_mask = y_reduced_opposite.argmax(dim=1).eq(preds_opposite.argmax(dim=1))
+    correct_mask = y_reduced_opposite[:, target_class].eq(preds_opposite[:, target_class]>0.5)
     if sum(correct_mask) < 2:
         return None, None
 
