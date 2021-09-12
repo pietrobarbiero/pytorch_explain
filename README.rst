@@ -73,6 +73,7 @@ For this simple experiment, let's solve the XOR problem
 
     import torch
     import torch_explain as te
+    from torch.nn.functional import one_hot
 
     x0 = torch.zeros((4, 100))
     x_train = torch.tensor([
