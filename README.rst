@@ -83,6 +83,7 @@ For this simple experiment, let's solve the XOR problem
     ], dtype=torch.float)
     x_train = torch.cat([x_train, x0], dim=1)
     y_train = torch.tensor([0, 1, 1, 0], dtype=torch.long)
+    y_train_1h = one_hot(y_train).to(torch.float)
 
 We can instantiate a simple feed-forward neural network
 with 3 layers using the ``EntropyLayer`` as the first one:
@@ -90,7 +91,7 @@ with 3 layers using the ``EntropyLayer`` as the first one:
 .. code:: python
 
     layers = [
-        te.nn.EntropyLinear(x_train.shape[1], 10, n_classes=2),
+        te.nn.EntropyLinear(x_train.shape[1], 10, n_classes=y_train_1h.shape[1]),
         torch.nn.LeakyReLU(),
         torch.nn.Linear(10, 4),
         torch.nn.LeakyReLU(),
@@ -104,13 +105,13 @@ simple explanations:
 
 .. code:: python
 
-    optimizer = torch.optim.AdamW(model.parameters(), lr=0.01)
-    loss_form = torch.nn.CrossEntropyLoss()
+    optimizer = torch.optim.AdamW(model.parameters(), lr=0.001)
+    loss_form = torch.nn.BCEWithLogitsLoss()
     model.train()
-    for epoch in range(1001):
+    for epoch in range(2001):
         optimizer.zero_grad()
         y_pred = model(x_train).squeeze(-1)
-        loss = loss_form(y_pred, y_train) + 0.00001 * te.nn.functional.entropy_logic_loss(model)
+        loss = loss_form(y_pred, y_train_1h) + 0.0001 * te.nn.functional.entropy_logic_loss(model)
         loss.backward()
         optimizer.step()
 
