@@ -37,7 +37,7 @@ class TestTemplateObject(unittest.TestCase):
 
             # train
             checkpoint_callback = ModelCheckpoint(dirpath=base_dir, monitor='val_loss', save_top_k=1)
-            trainer = Trainer(max_epochs=100, gpus=1, auto_lr_find=True, deterministic=True,
+            trainer = Trainer(max_epochs=100, gpus=0, auto_lr_find=True, deterministic=True,
                               check_val_every_n_epoch=1, default_root_dir=base_dir,
                               weights_save_path=base_dir, callbacks=[checkpoint_callback])
             model = Explainer(n_concepts=x.shape[1], n_classes=2, l1=0.001, temperature=0.6, lr=0.01,

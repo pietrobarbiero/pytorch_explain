@@ -2,8 +2,8 @@
 
 [run]
 branch = True
-source = template
-include = */template/*
+source = torch_explain
+include = */torch_explain/*
 omit =
     */setup.py
 
