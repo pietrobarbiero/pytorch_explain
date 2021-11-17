@@ -56,11 +56,11 @@ Quick start
 -----------
 
 You can install ``torch_explain`` along with all its dependencies from
-`PyPI <https://pypi.org/project/pytorch_explain/>`__:
+`PyPI <https://pypi.org/project/torch_explain/>`__:
 
 .. code:: bash
 
-    pip install -r requirements.txt torch-explain
+    pip install torch-explain
 
 
 Example
@@ -166,6 +166,15 @@ The original datasets can be downloaded from the links provided in the supplemen
 Theory
 --------
 Theoretical foundations can be found in the following papers.
+
+Logic Explained Networks::
+
+    @article{ciravegna2021logic,
+      title={Logic explained networks},
+      author={Ciravegna, Gabriele and Barbiero, Pietro and Giannini, Francesco and Gori, Marco and Li{\'o}, Pietro and Maggini, Marco and Melacci, Stefano},
+      journal={arXiv preprint arXiv:2108.05149},
+      year={2021}
+    }
 
 Entropy-based LENs::
 
