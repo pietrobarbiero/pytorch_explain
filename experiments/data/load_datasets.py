@@ -225,27 +225,30 @@ def load_vector_mnist(base_dir='./data', to_one_hot: bool = True):
     concept_names = [f'is{i}' for i in range(10)]
     label_names = [f"is{i}" for i in range(20)]
 
+    train_dataset = train_ds.train_data.unsqueeze(1).float()
+    test_dataset = test_ds.test_data.unsqueeze(1).float()
+
     n_samples = len(train_ds.train_data) // 2
-    x_train_img1 = train_ds.train_data[:n_samples]
-    x_train_img2 = train_ds.train_data[n_samples:]
+    x_train_img1 = train_dataset[:n_samples]
+    x_train_img2 = train_dataset[n_samples:]
     c_train_img1 = train_ds.train_labels[:n_samples]
     c_train_img2 = train_ds.train_labels[n_samples:]
     y_train = train_ds.train_labels[:n_samples] + train_ds.train_labels[n_samples:]
 
     n_samples = len(test_ds.test_data) // 2
-    x_test_img1 = test_ds.test_data[:n_samples]
-    x_test_img2 = test_ds.test_data[n_samples:]
+    x_test_img1 = test_dataset[:n_samples]
+    x_test_img2 = test_dataset[n_samples:]
     c_test_img1 = test_ds.test_labels[:n_samples]
     c_test_img2 = test_ds.test_labels[n_samples:]
     y_test = test_ds.test_labels[:n_samples] + test_ds.test_labels[n_samples:]
 
     if to_one_hot:
-        c_train_img1 = one_hot(c_train_img1)
-        c_train_img2 = one_hot(c_train_img2)
-        y_train = one_hot(y_train)
-        c_test_img1 = one_hot(c_test_img1)
-        c_test_img2 = one_hot(c_test_img2)
-        y_test = one_hot(y_test)
+        c_train_img1 = one_hot(c_train_img1).float()
+        c_train_img2 = one_hot(c_train_img2).float()
+        y_train = one_hot(y_train).float()
+        c_test_img1 = one_hot(c_test_img1).float()
+        c_test_img2 = one_hot(c_test_img2).float()
+        y_test = one_hot(y_test).float()
 
     train_data = TensorDataset(x_train_img1, x_train_img2, c_train_img1, c_train_img2, y_train)
     test_data = TensorDataset(x_test_img1, x_test_img2, c_test_img1, c_test_img2, y_test)
