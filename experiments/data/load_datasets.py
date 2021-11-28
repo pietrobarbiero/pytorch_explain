@@ -8,8 +8,10 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import cross_val_score, StratifiedShuffleSplit, StratifiedKFold
 from sklearn.preprocessing import MinMaxScaler, KBinsDiscretizer
 from sklearn.tree import DecisionTreeClassifier
+from torchvision.datasets import MNIST
 from torch.nn.functional import one_hot
 from torch.utils.data import TensorDataset
+from torchvision.transforms import ToTensor
 
 
 def load_mimic(base_dir: str = './data/'):
@@ -216,6 +218,39 @@ def load_mnist(base_dir='./data'):
     y = one_hot(torch.tensor(y).to(torch.long)).to(torch.float)
     return x, y, concept_names
 
+
+def load_vector_mnist(base_dir='./data', to_one_hot: bool = True):
+    train_ds = MNIST("../data/mnist", train=True, download=True, transform=ToTensor())
+    test_ds = MNIST("../data/mnist", train=False, download=True, transform=ToTensor())
+    concept_names = [f'is{i}' for i in range(10)]
+    label_names = [f"is{i}" for i in range(20)]
+
+    n_samples = len(train_ds.train_data) // 2
+    x_train_img1 = train_ds.train_data[:n_samples]
+    x_train_img2 = train_ds.train_data[n_samples:]
+    c_train_img1 = train_ds.train_labels[:n_samples]
+    c_train_img2 = train_ds.train_labels[n_samples:]
+    y_train = train_ds.train_labels[:n_samples] + train_ds.train_labels[n_samples:]
+
+    n_samples = len(test_ds.test_data) // 2
+    x_test_img1 = test_ds.test_data[:n_samples]
+    x_test_img2 = test_ds.test_data[n_samples:]
+    c_test_img1 = test_ds.test_labels[:n_samples]
+    c_test_img2 = test_ds.test_labels[n_samples:]
+    y_test = test_ds.test_labels[:n_samples] + test_ds.test_labels[n_samples:]
+
+    if to_one_hot:
+        c_train_img1 = one_hot(c_train_img1)
+        c_train_img2 = one_hot(c_train_img2)
+        y_train = one_hot(y_train)
+        c_test_img1 = one_hot(c_test_img1)
+        c_test_img2 = one_hot(c_test_img2)
+        y_test = one_hot(y_test)
+
+    train_data = TensorDataset(x_train_img1, x_train_img2, c_train_img1, c_train_img2, y_train)
+    test_data = TensorDataset(x_test_img1, x_test_img2, c_test_img1, c_test_img2, y_test)
+    return train_data, test_data, concept_names, label_names
+
 # def load_cub2(base_dir='./data'):
 #     train_data = pd.read_csv(os.path.join(base_dir, 'CUB/cub200.csv'))
 #     x = train_data.iloc[:, :-1].values
@@ -274,5 +309,6 @@ def load_cub(base_dir='./data'):
 
 
 if __name__ == '__main__':
-    x, y, c = load_vDem('.')
+    train_data, test_data, concept_names, label_names = load_vector_mnist('.')
+    print('ok!')
     # x, y, c = load_celldiff('.')
