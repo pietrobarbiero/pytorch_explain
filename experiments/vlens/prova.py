@@ -22,8 +22,8 @@ model.fc = nn.Linear(in_features=512, out_features=20, bias=True)
 
 #%%
 
-train_ds = MNIST("mnist", train=True, download=True, transform=ToTensor())
-test_ds = MNIST("mnist", train=False, download=True, transform=ToTensor())
+train_ds = MNIST("../data/mnist", train=True, download=True, transform=ToTensor())
+test_ds = MNIST("../data/mnist", train=False, download=True, transform=ToTensor())
 
 #%%
 
