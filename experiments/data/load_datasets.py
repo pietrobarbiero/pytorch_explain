@@ -1,3 +1,4 @@
+import itertools
 import os
 import pandas as pd
 import numpy as np
@@ -5,13 +6,15 @@ import torch
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.impute import SimpleImputer
 from sklearn.linear_model import LogisticRegression
-from sklearn.model_selection import cross_val_score, StratifiedShuffleSplit, StratifiedKFold
-from sklearn.preprocessing import MinMaxScaler, KBinsDiscretizer
+from sklearn.model_selection import cross_val_score, StratifiedShuffleSplit, StratifiedKFold, train_test_split
+from sklearn.preprocessing import MinMaxScaler, KBinsDiscretizer, OneHotEncoder
 from sklearn.tree import DecisionTreeClassifier
 from torchvision.datasets import MNIST
 from torch.nn.functional import one_hot
-from torch.utils.data import TensorDataset
+from torch.utils.data import TensorDataset, DataLoader
 from torchvision.transforms import ToTensor
+
+from experiments.data.CUB200 import cub_loader
 
 
 def load_mimic(base_dir: str = './data/'):
@@ -311,7 +314,129 @@ def load_cub(base_dir='./data'):
             return train_data, val_data, test_data, concept_names
 
 
+
+# Return the number of labels of each concept
+def get_latent_sizes():
+    return np.array([1, 3, 6, 40, 32, 32])
+
+
+# See "primer on bases" above, to understand
+def get_latent_bases():
+    latents_sizes = get_latent_sizes()
+    return np.concatenate((latents_sizes[::-1].cumprod()[::-1][1:],
+                           np.array([1, ])))
+
+
+# Convert a concept-based index (i.e. (color_id, shape_id, ..., pos_y_id)) into a single index
+def latent_to_index(latents, latents_bases):
+    return np.dot(latents, latents_bases).astype(int)
+
+
+
+def load_dsprites(dataset_path='./data', c_filter_fn=lambda x: True, filtered_c_ids=np.arange(6), label_fn=lambda x: x[1],
+                  train_test_split_flag=True, train_size=0.85):
+    '''
+    :param dataset_path:  path to the .npz dsprites file
+    :param c_filter_fn: function returning True/False for whether to keep the concept combination or not
+    :param filtered_c_ids: np array specifying which concepts to keep in the dataset
+    :param label_fn: function taking in concept values, and returning an output task label
+    :param train_test_split_flag: whether to perform a train-test split or not
+    :param train_size: fraction of data to use for train
+    :return:
+    '''
+
+    # Load dataset
+    dataset_zip = np.load(os.path.join(dataset_path, 'dsprites/dsprites.npz'))
+    imgs = dataset_zip['imgs']
+
+    # Compute the index conversion scheme
+    latent_sizes = get_latent_sizes()
+    latents_bases = get_latent_bases()
+
+    # Get all combinations of concept values
+    latent_size_listss = [list(np.arange(i)) for i in latent_sizes]
+    all_combs = np.array(list(itertools.product(*latent_size_listss)))
+
+    # Compute which concept labels to filter out
+    c_ids = np.array([c_filter_fn(i) for i in all_combs])
+    c_ids = np.where(c_ids == True)[0]
+    c_data = all_combs[c_ids]
+
+    # Compute the class labels from concepts
+    y_data = np.array([label_fn(i) for i in c_data])
+
+    # Get corresponding ids of these combinations in the 'img' array
+    img_indices = [latent_to_index(i, latents_bases) for i in c_data]
+
+    # Select the corresponding imgs
+    x_data = imgs[img_indices]
+    x_data = np.expand_dims(x_data, axis=-1)
+    x_data = x_data.astype(('float32'))
+
+    # Filter out specified concepts, with their names
+    names = ['color', 'shape', 'scale', 'rotation', 'x_pos', 'y_pos']
+    c_names = [names[i] for i in filtered_c_ids]
+    c_data = c_data[:, filtered_c_ids]
+
+    # If no train/test split speficied - return data as-is
+    if train_test_split_flag is False:
+        return x_data, y_data, c_data, c_names
+
+    random_state = 42
+    x_train, x_test, y_train, y_test, c_train, c_test = train_test_split(x_data, y_data, c_data, train_size=train_size,
+                                                                         random_state=random_state)
+
+    x_train, x_val, y_train, y_val, c_train, c_val = train_test_split(x_train, y_train, c_train, test_size=0.33, random_state=42)
+    x_train = np.transpose(x_train, [0, 3, 1, 2])
+    x_val = np.transpose(x_val, [0, 3, 1, 2])
+    x_test = np.transpose(x_test, [0, 3, 1, 2])
+    # x_train = np.repeat(x_train, 3, axis=1)
+    # x_val = np.repeat(x_val, 3, axis=1)
+    # x_test = np.repeat(x_test, 3, axis=1)
+
+    enc = OneHotEncoder(sparse=False)
+    c_train_list, c_val_list, c_test_list = [], [], []
+    for concept in range(c_train.shape[1]):
+        c_train_list.append(enc.fit_transform(c_train[:, concept].reshape(-1, 1)))
+        c_val_list.append(enc.fit_transform(c_val[:, concept].reshape(-1, 1)))
+        c_test_list.append(enc.fit_transform(c_test[:, concept].reshape(-1, 1)))
+    c_train = np.hstack(c_train_list)
+    c_val = np.hstack(c_val_list)
+    c_test = np.hstack(c_test_list)
+    y_train = enc.fit_transform(y_train.reshape(-1, 1))
+    y_val = enc.fit_transform(y_val.reshape(-1, 1))
+    y_test = enc.fit_transform(y_test.reshape(-1, 1))
+
+    c_train = c_train[:, :9]
+    c_val = c_val[:, :9]
+    c_test = c_test[:, :9]
+
+    print('x_train shape:', x_train.shape)
+    print('c_train shape:', c_train.shape)
+    print('y_train shape:', y_train.shape)
+    print('Number of images in x_train', x_train.shape[0])
+    print('Number of images in x_val', x_val.shape[0])
+    print('Number of images in x_test', x_test.shape[0])
+
+    train_data = TensorDataset(torch.FloatTensor(x_train), torch.FloatTensor(c_train), torch.FloatTensor(y_train))
+    val_data = TensorDataset(torch.FloatTensor(x_val), torch.FloatTensor(c_val), torch.FloatTensor(y_val))
+    test_data = TensorDataset(torch.FloatTensor(x_test), torch.FloatTensor(c_test), torch.FloatTensor(y_test))
+
+    return train_data, val_data, test_data, c_names
+
+
+def load_cub_full(root_dir='./CUB200'):
+    concept_names = [str(s) for s in pd.read_csv(f'{root_dir}/attributes.txt', sep=' ', index_col=0, header=None).values.ravel()]
+    class_names = [str(s) for s in pd.read_csv(f'{root_dir}/CUB_200_2011/classes.txt', sep=' ', index_col=0, header=None).values.ravel()]
+    train_data = cub_loader.load_data(pkl_paths=[f'{root_dir}/train.pkl'], use_attr=True, no_img=False, batch_size=128, root_dir=root_dir)
+    val_data = cub_loader.load_data(pkl_paths=[f'{root_dir}/val.pkl'], use_attr=True, no_img=False, batch_size=128, root_dir=root_dir)
+    test_data = cub_loader.load_data(pkl_paths=[f'{root_dir}/test.pkl'], use_attr=True, no_img=False, batch_size=128, root_dir=root_dir)
+    return train_data, val_data, test_data, concept_names, class_names
+
+
 if __name__ == '__main__':
-    train_data, test_data, concept_names, label_names = load_vector_mnist('.')
+    train_data, val_data, test_data, concept_names, class_names = load_cub_full()
+    # train_data, test_data, concept_names, label_names = load_vector_mnist('.')
+    # train_data, val_data, test_data, c_names = load_dsprites('.')
     print('ok!')
     # x, y, c = load_celldiff('.')
