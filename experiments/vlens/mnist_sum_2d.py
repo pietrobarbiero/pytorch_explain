@@ -23,7 +23,7 @@ def main():
     trainer = pl.Trainer(gpus=1, max_epochs=100)
     trainer.fit(model, train_dl)
 
-    result_dir = './results/mnist_sum/'
+    result_dir = './results/mnist_sum_2d/'
     os.makedirs(result_dir, exist_ok=True)
     trainer.save_checkpoint(os.path.join(result_dir, 'model.pt'))
 
@@ -35,7 +35,7 @@ class ResNetMNISTsum(pl.LightningModule):
         super().__init__()
         self.model = resnet18(num_classes=10)
         self.model.conv1 = Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
-        self.model.fc = ConceptEmbeddings(in_features=512, out_features=10, emb_size=10, bias=True)
+        self.model.fc = ConceptEmbeddings(in_features=512, out_features=10, emb_size=2, bias=True)
         self.c2y_model = Sequential(*[
             Linear(20, 20),
             LeakyReLU(),
