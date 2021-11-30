@@ -1,7 +1,7 @@
 import os
 import torch
 from sklearn.metrics import f1_score, accuracy_score
-from torch.nn import Conv2d, BCELoss, Sequential, LeakyReLU, Linear
+from torch.nn import Conv2d, BCELoss, BCEWithLogitsLoss, CrossEntropyLoss, Sequential, LeakyReLU, Linear
 from torch.nn.functional import one_hot
 from torch.utils.data import DataLoader
 from torchvision.models import resnet18, inception_v3
@@ -18,12 +18,12 @@ def main():
 
     train_data, _, _, concept_names, class_names = load_cub_full('../data/CUB200')
 
-    train_dl = DataLoader(train_data, batch_size=batch_size)
+    train_dl = DataLoader(train_data, shuffle=True, batch_size=batch_size)
     # test_dl = DataLoader(test_data, batch_size=batch_size)
 
     model = InceptionNetCUB()
     # c_pred, y_pred = model(train_data.tensors[0][:100])
-    trainer = pl.Trainer(gpus=1, max_epochs=10)
+    trainer = pl.Trainer(gpus=1, max_epochs=100)
     trainer.fit(model, train_dl)
 
     result_dir = './results/cub_2d/'
@@ -36,15 +36,22 @@ def main():
 class InceptionNetCUB(pl.LightningModule):
     def __init__(self):
         super().__init__()
-        self.model = inception_v3(num_classes=312)
+        self.model = inception_v3(pretrained=True)
+        # for param in self.model.parameters():
+        #     param.requires_grad = False
+
         # self.model.conv1 = Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
         self.model.fc = ConceptEmbeddings(in_features=2048, out_features=312, emb_size=2, bias=True)
+        # self.model.fc.weight.requires_grad = True
+        # self.model.fc.bias.requires_grad = True
+
         self.c2y_model = Sequential(*[
             Linear(312, 100),
             LeakyReLU(),
             Linear(100, 200),
         ])
         self.loss = BCELoss()
+        # self.loss = BCEWithLogitsLoss()
 
     def forward(self, x):
         c = self.model(x).logits
@@ -61,6 +68,9 @@ class InceptionNetCUB(pl.LightningModule):
         c_emb, y_emb = self(x)
         c_logits = semantics(c_emb)
         y_logits = semantics(y_emb)
+        # c_logits = torch.sum(torch.pow(c_emb, 3), dim=-1)
+        # print(c_logits.min(), c_logits.max())
+        # y_logits = torch.norm(y_emb, p=2, dim=-1)
         loss = self.loss(c_logits, c) + self.loss(y_logits, y)
 
         # compute accuracy
@@ -79,7 +89,7 @@ class InceptionNetCUB(pl.LightningModule):
         return loss
 
     def configure_optimizers(self):
-        return torch.optim.AdamW(self.parameters(), lr=0.005)
+        return torch.optim.Adam(self.parameters(), lr=0.001)
 
 
 if __name__ == '__main__':
