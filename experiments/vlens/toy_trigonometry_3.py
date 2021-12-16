@@ -3,19 +3,22 @@ import numpy as np
 import torch
 import matplotlib.pyplot as plt
 import seaborn as sns
-from sklearn.metrics import f1_score, accuracy_score
+from sklearn.metrics import accuracy_score
 from sklearn.manifold import TSNE
-from torch.nn import Conv2d, BCELoss, BCEWithLogitsLoss, Sequential, LeakyReLU, Linear
+from torch.nn import BCELoss, BCEWithLogitsLoss, Sequential, LeakyReLU, Linear
 from torch.utils.data import DataLoader, TensorDataset
-from torch_explain.nn import ConceptEmbeddings, context, semantics, to_boolean
+from torch_explain.nn import ConceptEmbeddings, context, semantics
 import pytorch_lightning as pl
 from pytorch_lightning import seed_everything
 from torch_explain.nn.vector_logic import NeSyLayer
 
 
 def generate_data(size):
+    # sample from normal distribution
     h = np.random.randn(size, 3) * 4 + 1
     w, y, z = h[:, 0], h[:, 1], h[:, 2]
+
+    # raw features
     x = np.stack([
         np.sin(w) + w,
         np.cos(w) + w,
@@ -25,12 +28,17 @@ def generate_data(size):
         np.cos(z) + z,
         w ** 2 + y ** 2 + z ** 2,
     ]).T
+
+    # concetps
     c = np.stack([
         w > 0,
         y > 0,
         z > 0,
     ]).T
+
+    # task(s)
     y = (w + y) > 0
+
     x = torch.FloatTensor(x)
     c = torch.FloatTensor(c)
     y = torch.FloatTensor(y)
@@ -38,50 +46,59 @@ def generate_data(size):
 
 
 def main():
+    seed_everything(42)
+
+    # parameters for data, model, and training
     batch_size = 3000
     batch_size_test = 1000
     max_epochs = 400
-    seed_everything(42)
-    x, c, y = generate_data(batch_size)
-    x_test, c_test, y_test = generate_data(batch_size_test)
-    n_features, n_concepts, n_tasks = x.shape[1], c.shape[1], 1
 
+    # generate "trigonometric" train data set
+    x, c, y = generate_data(batch_size)
     train_data = TensorDataset(x, c, y)
     train_dl = DataLoader(train_data, batch_size=batch_size)
+    n_features, n_concepts, n_tasks = x.shape[1], c.shape[1], 1
 
-    # Without embeddings (concepts are just scalars)
-    emb = False
-    model_1 = TrigoNetEmb(n_features, n_concepts, n_tasks) if emb else TrigoNet(n_features, n_concepts, n_tasks)
+    # generate "trigonometric" test data set
+    x_test, c_test, y_test = generate_data(batch_size_test)
+
+    # train model *without* embeddings (concepts are just scalars)
+    # train model
+    model_1 = TrigoNet(n_features, n_concepts, n_tasks)
     trainer = pl.Trainer(gpus=0, max_epochs=max_epochs)
     trainer.fit(model_1, train_dl)
-
+    # freeze model and compute test accuracy
     model_1.freeze()
     c_logits, y_logits = model_1.forward(x_test)
     c_accuracy_1, y_accuracy_1 = compute_accuracy(torch.sigmoid(c_logits), torch.sigmoid(y_logits), c_test, y_test)
     print(f'c_acc: {c_accuracy_1:.4f}, y_acc: {y_accuracy_1:.4f}')
 
-    # With embeddings
-    emb = True
-    model_2 = TrigoNetEmb(n_features, n_concepts, n_tasks) if emb else TrigoNet(n_features, n_concepts, n_tasks)
+    # train model *with* embeddings (concepts are vectors)
+    # train model
+    model_2 = TrigoNetEmb(n_features, n_concepts, n_tasks)
     trainer = pl.Trainer(gpus=0, max_epochs=max_epochs)
     trainer.fit(model_2, train_dl)
-
+    # freeze model and compute test accuracy
     model_2.freeze()
     c_sem, y_sem = model_2.forward(x_test)
     c_accuracy_2, y_accuracy_2 = compute_accuracy(c_sem, y_sem, c_test, y_test)
     print(f'c_acc: {c_accuracy_2:.4f}, y_acc: {y_accuracy_2:.4f}, ')
 
+    # now have fun and plot a few results!
+    # first, create dir to save plots
     result_dir = './results/trigonometry_3/'
     os.makedirs(result_dir, exist_ok=True)
 
-    epochs = np.arange(len(model_1.loss_list))
-
-    c_train_loss_1, y_train_loss_1 = np.array(model_1.loss_list)[:, 0], np.array(model_1.loss_list)[:, 1]
-    c_train_loss_2, y_train_loss_2 = np.array(model_2.loss_list)[:, 0], np.array(model_2.loss_list)[:, 1]
-
+    # count the number of trainable parameters for each model
     n_params_model_1 = sum(p.numel() for p in model_1.parameters())
     n_params_model_2 = sum(p.numel() for p in model_2.parameters())
 
+    # get train accuracies (both for concepts and for tasks)
+    c_train_loss_1, y_train_loss_1 = np.array(model_1.loss_list)[:, 0], np.array(model_1.loss_list)[:, 1]
+    c_train_loss_2, y_train_loss_2 = np.array(model_2.loss_list)[:, 0], np.array(model_2.loss_list)[:, 1]
+
+    # plot concept accuracy
+    epochs = np.arange(len(model_1.loss_list))
     plt.figure()
     plt.title(f'Concept Accuracy\n'
               f'Test accuracy with "scalar" concepts={c_accuracy_1:.2f} (params: {n_params_model_1})\n'
@@ -95,6 +112,7 @@ def main():
     plt.savefig(os.path.join(result_dir, 'c_accuracy.png'))
     plt.show()
 
+    # plot task accuracy
     plt.figure()
     plt.title(f'Task Accuracy\n'
               f'Test accuracy with "scalar" concepts={y_accuracy_1:.2f} (params: {n_params_model_1})'
@@ -108,14 +126,17 @@ def main():
     plt.savefig(os.path.join(result_dir, 'y_accuracy.png'))
     plt.show()
 
+    # finally, inspect the "context" of concept embeddings
     c_emb_test = model_2.x2c_model(x_test)
     y_emb_test = model_2.c2y_model(c_emb_test)
     c_ctx = context(c_emb_test)
     y_ctx = context(y_emb_test).squeeze(1)
+    # reduce dimensionality to get 2D plots
     c_ctxr = TSNE().fit_transform(c_ctx.reshape(3000, 5))
     y_ctxr = TSNE().fit_transform(y_ctx)
     c_ctxrr = c_ctxr.reshape(1000, 3, 2)
 
+    # plot "context" for concepts
     plt.figure()
     plt.title(f'Concept "context" (test)')
     sns.scatterplot(c_ctxrr[:, 0, 0], c_ctxrr[:, 0, 1], label='concept #1')
@@ -127,6 +148,7 @@ def main():
     plt.savefig(os.path.join(result_dir, 'c_ctx.png'))
     plt.show()
 
+    # plot "context" for tasks
     plt.figure()
     plt.title(f'Task "context" (test)')
     sns.scatterplot(y_ctxr[y_sem[:, 0]>=0.5, 0], y_ctxr[y_sem[:, 0]>=0.5, 1], label='class #1')
@@ -136,10 +158,6 @@ def main():
     plt.tight_layout()
     plt.savefig(os.path.join(result_dir, 'y_ctx.png'))
     plt.show()
-
-    # result_dir = './results/trigonometry/'
-    # os.makedirs(result_dir, exist_ok=True)
-    # trainer.save_checkpoint(os.path.join(result_dir, 'model.pt'))
 
     return
 
