@@ -10,7 +10,7 @@ from torch.utils.data import DataLoader, TensorDataset
 from torch_explain.nn import ConceptEmbeddings, context, semantics
 import pytorch_lightning as pl
 from pytorch_lightning import seed_everything
-from torch_explain.nn.vector_logic import NeSyLayer
+from torch_explain.nn.vector_logic import NeSyLayer, to_boolean
 
 
 def generate_data(size):
@@ -178,7 +178,7 @@ class TrigoNetEmb(pl.LightningModule):
 
     def forward(self, x):
         c = self.x2c_model(x)
-        y = self.c2y_model(c)
+        y = self.c2y_model(to_boolean(c, 2, 1))
         c_sem = semantics(c)
         y_sem = semantics(y)
         return c_sem, y_sem
