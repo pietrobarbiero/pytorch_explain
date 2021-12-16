@@ -19,7 +19,8 @@ class ConceptEmbeddings(Linear):
         self.reset_parameters()
 
     def forward(self, input: Tensor) -> Tensor:
-        return (input @ self.weight).permute(1, 0, 2) + self.bias
+        h = (input @ self.weight).permute(1, 0, 2) + self.bias
+        return embedding_to_nesyemb(h)
 
 
 class NeSyLayer(Module):
@@ -39,7 +40,8 @@ class NeSyLayer(Module):
         h = self.attn_layer(input)
         h = self.linear1(h)
         h = F.leaky_relu(h)
-        out = self.linear2(h).squeeze(-1)
+        h = self.linear2(h).squeeze(-1)
+        out = embedding_to_nesyemb(h)
         return out
 
     def extra_repr(self) -> str:
@@ -86,7 +88,7 @@ def logprobs(embedding: Tensor) -> Tensor:
 
 
 def semantics(embedding: Tensor) -> Tensor:
-    return torch.exp(-torch.norm(embedding, p=2, dim=-1))
+    return F.relu(torch.norm(embedding, dim=-1) - 1) #torch.exp(-torch.norm(embedding, p=2, dim=-1))
 
 
 def to_boolean(embedding: Tensor, true_norm: float = 0, false_norm: float = 1) -> Tensor:
@@ -119,8 +121,8 @@ if __name__ == '__main__':
     model2 = torch.nn.Sequential(*[
         ConceptEmbeddings(n_features, n_concepts, emb_size),
         NeSyLayer(emb_size, n_concepts, 3, 10),
-        torch.nn.LeakyReLU(),
         NeSyLayer(emb_size, 10, 3, n_classes),
     ])
-    y_emb = model2(x).squeeze(-1)
+    y_emb = model2(x)
     print(y_emb.shape)
+    print(semantics(y_emb))
