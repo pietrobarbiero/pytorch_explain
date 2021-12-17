@@ -5,7 +5,6 @@ import torch
 import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.tree import DecisionTreeClassifier
-from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score
 from sklearn.manifold import TSNE
 from torch.nn import BCELoss, BCEWithLogitsLoss, Sequential, LeakyReLU, Linear
@@ -54,7 +53,7 @@ def main():
     # parameters for data, model, and training
     batch_size = 3000
     batch_size_test = 1000
-    max_epochs = 1#400
+    max_epochs = 400
 
     # generate "trigonometric" train data set
     x, c, y = generate_data(batch_size)
@@ -87,8 +86,8 @@ def main():
     c_accuracy_2, y_accuracy_2 = compute_accuracy(c_sem, y_sem, c_test, y_test)
     print(f'c_acc: {c_accuracy_2:.4f}, y_acc: {y_accuracy_2:.4f}')
 
-    # now have fun and plot a few results!
-    # first, create dir to save plots
+    # # now have fun and plot a few results!
+    # # first, create dir to save plots
     result_dir = './results/trigonometry_3/'
     os.makedirs(result_dir, exist_ok=True)
 
@@ -166,9 +165,11 @@ def main():
     c_emb_train = model_2.x2c_model(x)
     c_ctx_train = context(c_emb_train).reshape(x.shape[0], -1)
     c_sem_train = semantics(c_emb_train)
+    c_sem_train = c_sem_train.cpu().detach() > 0.5
     c_emb_test = model_2.x2c_model(x_test)
     c_ctx_test = context(c_emb_test).reshape(x_test.shape[0], -1)
     c_sem_test = semantics(c_emb_test)
+    c_sem_test = c_sem_test.cpu().detach() > 0.5
     # context only
     clf = DecisionTreeClassifier(random_state=42)
     clf.fit(c_ctx_train, y)
@@ -184,6 +185,7 @@ def main():
         'semantics': semantics_accuracy,
         'context+semantics': context_semantics_accuracy,
     }
+    print(accuracy)
     joblib.dump(accuracy, os.path.join(result_dir, f'{clf.__class__.__name__}_accuracy.joblib'))
 
     return
