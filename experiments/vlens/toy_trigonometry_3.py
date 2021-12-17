@@ -1,8 +1,11 @@
+import joblib
 import os
 import numpy as np
 import torch
 import matplotlib.pyplot as plt
 import seaborn as sns
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score
 from sklearn.manifold import TSNE
 from torch.nn import BCELoss, BCEWithLogitsLoss, Sequential, LeakyReLU, Linear
@@ -51,7 +54,7 @@ def main():
     # parameters for data, model, and training
     batch_size = 3000
     batch_size_test = 1000
-    max_epochs = 400
+    max_epochs = 1#400
 
     # generate "trigonometric" train data set
     x, c, y = generate_data(batch_size)
@@ -82,7 +85,7 @@ def main():
     model_2.freeze()
     c_sem, y_sem = model_2.forward(x_test)
     c_accuracy_2, y_accuracy_2 = compute_accuracy(c_sem, y_sem, c_test, y_test)
-    print(f'c_acc: {c_accuracy_2:.4f}, y_acc: {y_accuracy_2:.4f}, ')
+    print(f'c_acc: {c_accuracy_2:.4f}, y_acc: {y_accuracy_2:.4f}')
 
     # now have fun and plot a few results!
     # first, create dir to save plots
@@ -158,6 +161,30 @@ def main():
     plt.tight_layout()
     plt.savefig(os.path.join(result_dir, 'y_ctx.png'))
     plt.show()
+
+    # check the accuracy of context and semantics separately
+    c_emb_train = model_2.x2c_model(x)
+    c_ctx_train = context(c_emb_train).reshape(x.shape[0], -1)
+    c_sem_train = semantics(c_emb_train)
+    c_emb_test = model_2.x2c_model(x_test)
+    c_ctx_test = context(c_emb_test).reshape(x_test.shape[0], -1)
+    c_sem_test = semantics(c_emb_test)
+    # context only
+    clf = DecisionTreeClassifier(random_state=42)
+    clf.fit(c_ctx_train, y)
+    context_accuracy = clf.score(c_ctx_test, y_test)
+    # semantics only
+    clf.fit(c_sem_train, y)
+    semantics_accuracy = clf.score(c_sem_test, y_test)
+    # context + semantics
+    clf.fit(c_emb_train.reshape(x.shape[0], -1), y)
+    context_semantics_accuracy = clf.score(c_emb_test.reshape(x_test.shape[0], -1), y_test)
+    accuracy = {
+        'context': context_accuracy,
+        'semantics': semantics_accuracy,
+        'context+semantics': context_semantics_accuracy,
+    }
+    joblib.dump(accuracy, os.path.join(result_dir, f'{clf.__class__.__name__}_accuracy.joblib'))
 
     return
 
