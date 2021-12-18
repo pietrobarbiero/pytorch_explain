@@ -21,7 +21,7 @@ from torch_explain.nn.vector_logic import NeSyLayer, to_boolean
 
 def main():
     # parameters for data, model, and training
-    cv = 2
+    cv = 5
     result_dir = './results/toy_vectors/'
 
     results = joblib.load(os.path.join(result_dir, f'results.joblib'))
@@ -36,13 +36,13 @@ def main():
         # train accuracy
         for epoch in range(n_epochs):
             # concept
-            c_train_loss.append(['Boolean', split, epoch, results[f'{split}']['train_acc_bool'][epoch][0]])
-            c_train_loss.append(['Fuzzy', split, epoch, results[f'{split}']['train_acc_fuzzy'][epoch][0]])
             c_train_loss.append(['Embeddings', split, epoch, results[f'{split}']['train_acc_emb'][epoch][0]])
+            c_train_loss.append(['Fuzzy', split, epoch, results[f'{split}']['train_acc_fuzzy'][epoch][0]])
+            c_train_loss.append(['Boolean', split, epoch, results[f'{split}']['train_acc_bool'][epoch][0]])
             # tasks
-            y_train_loss.append(['Boolean', split, epoch, results[f'{split}']['train_acc_bool'][epoch][1]])
-            y_train_loss.append(['Fuzzy', split, epoch, results[f'{split}']['train_acc_fuzzy'][epoch][1]])
             y_train_loss.append(['Embeddings', split, epoch, results[f'{split}']['train_acc_emb'][epoch][1]])
+            y_train_loss.append(['Fuzzy', split, epoch, results[f'{split}']['train_acc_fuzzy'][epoch][1]])
+            y_train_loss.append(['Boolean', split, epoch, results[f'{split}']['train_acc_bool'][epoch][1]])
         
         # true labels
         c_train = results[f'{split}']['c_train']
@@ -60,12 +60,12 @@ def main():
         c_accuracy_emb, y_accuracy_emb = compute_accuracy(semantics(results[f'{split}']['c_emb_test']),
                                                           semantics(results[f'{split}']['y_emb_test']),
                                                           c_test, y_test)
-        c_test_acc.append(['Boolean', split, c_accuracy_bool])
-        c_test_acc.append(['Fuzzy', split, c_accuracy_fuzzy])
         c_test_acc.append(['Embeddings', split, c_accuracy_emb])
-        y_test_acc.append(['Boolean', split, y_accuracy_bool])
-        y_test_acc.append(['Fuzzy', split, y_accuracy_fuzzy])
+        c_test_acc.append(['Fuzzy', split, c_accuracy_fuzzy])
+        c_test_acc.append(['Boolean', split, c_accuracy_bool])
         y_test_acc.append(['Embeddings', split, y_accuracy_emb])
+        y_test_acc.append(['Fuzzy', split, y_accuracy_fuzzy])
+        y_test_acc.append(['Boolean', split, y_accuracy_bool])
 
         # check the accuracy of context and semantics separately
         clf = DecisionTreeClassifier(random_state=42)
@@ -86,75 +86,79 @@ def main():
         emb_context_accuracy = clf.fit(c_emb_ctx_train, y_train).score(c_emb_ctx_test, y_test)
         emb_semantics_accuracy = clf.fit(c_emb_sem_train, y_train).score(c_emb_sem_test, y_test)
         emb_ctx_sem_accuracy = clf.fit(c_emb_train.reshape(c_train.shape[0], -1), y_train).score(c_emb_test.reshape(c_test.shape[0], -1), y_test)
-        y_test_acc_full.append(['Fuzzy', split, 'context', fuzzy_context_accuracy])
-        y_test_acc_full.append(['Fuzzy', split, 'semantics', fuzzy_semantics_accuracy])
-        y_test_acc_full.append(['Fuzzy', split, 'context+semantics', fuzzy_context_accuracy])
         y_test_acc_full.append(['Embeddings', split, 'context', emb_context_accuracy])
         y_test_acc_full.append(['Embeddings', split, 'semantics', emb_semantics_accuracy])
         y_test_acc_full.append(['Embeddings', split, 'context+semantics', emb_ctx_sem_accuracy])
+        y_test_acc_full.append(['Fuzzy', split, 'context', fuzzy_context_accuracy])
+        y_test_acc_full.append(['Fuzzy', split, 'semantics', fuzzy_semantics_accuracy])
+        y_test_acc_full.append(['Fuzzy', split, 'context+semantics', fuzzy_context_accuracy])
 
-    c_train_loss = pd.DataFrame(c_train_loss, columns=['Representation', 'cv_split', 'epoch', 'accuracy'])
-    y_train_loss = pd.DataFrame(y_train_loss, columns=['Representation', 'cv_split', 'epoch', 'accuracy'])
+    c_train_loss = pd.DataFrame(c_train_loss, columns=['Representation', 'cv_split', 'epoch', 'test accuracy'])
+    y_train_loss = pd.DataFrame(y_train_loss, columns=['Representation', 'cv_split', 'epoch', 'test accuracy'])
 
-    c_test_acc = pd.DataFrame(c_test_acc, columns=['Representation', 'cv_split', 'accuracy'])
-    y_test_acc = pd.DataFrame(y_test_acc, columns=['Representation', 'cv_split', 'accuracy'])
+    c_test_acc = pd.DataFrame(c_test_acc, columns=['Representation', 'cv_split', 'test accuracy'])
+    y_test_acc = pd.DataFrame(y_test_acc, columns=['Representation', 'cv_split', 'test accuracy'])
 
-    y_test_acc_full = pd.DataFrame(y_test_acc_full, columns=['Representation', 'cv_split', 'part', 'accuracy'])
+    y_test_acc_full = pd.DataFrame(y_test_acc_full, columns=['Representation', 'cv_split', 'part', 'test accuracy'])
+
+    sns.set_style('whitegrid')
+    figsize = [6, 3]
 
     # plot test concept accuracy
-    plt.figure(figsize=[6, 4])
-    plt.title(f'Test Concept Accuracy')
-    sns.boxenplot(data=c_test_acc, x='Representation', y='accuracy')
+    plt.figure(figsize=figsize)
+    plt.title(f'Concept Accuracy')
+    sns.boxenplot(data=c_test_acc, x='Representation', y='test accuracy')
     # plt.ylim([0.6, 1.05])
-    # plt.xlabel('epochs')
+    plt.xlabel('')
     # plt.ylabel('train accuracy (c)')
     plt.tight_layout()
     plt.savefig(os.path.join(result_dir, 'c_accuracy_test.png'))
     plt.show()
 
     # plot test task accuracy
-    plt.figure(figsize=[6, 4])
-    plt.title(f'Test Task Accuracy')
-    sns.boxenplot(data=y_test_acc, x='Representation', y='accuracy')
+    plt.figure(figsize=figsize)
+    plt.title(f'Task Accuracy')
+    sns.boxenplot(data=y_test_acc, x='Representation', y='test accuracy')
     # plt.ylim([0.6, 1.05])
-    # plt.xlabel('epochs')
+    plt.xlabel('')
     # plt.ylabel('train accuracy (c)')
     plt.tight_layout()
     plt.savefig(os.path.join(result_dir, 'y_accuracy_test.png'))
     plt.show()
 
     # plot test concept accuracy full
-    plt.figure(figsize=[6, 4])
-    plt.title(f'Test Concept Accuracy')
-    sns.boxenplot(data=y_test_acc_full, x='part', y='accuracy', hue='Representation')
+    plt.figure(figsize=figsize)
+    plt.title(f'Isolated Task Accuracy (with Decision Tree)')
+    g = sns.boxenplot(data=y_test_acc_full, x='part', y='test accuracy', hue='Representation')
     # plt.ylim([0.6, 1.05])
     plt.xlabel('')
     # plt.ylabel('train accuracy (c)')
+    g.legend_.set_title(None)
     plt.tight_layout()
     plt.savefig(os.path.join(result_dir, 'y_accuracy_test_full.png'))
     plt.show()
 
-    # plot train concept accuracy
-    plt.figure(figsize=[6, 4])
-    plt.title(f'Train Concept Accuracy')
-    sns.lineplot(data=c_train_loss, x='epoch', y='accuracy', hue='Representation')
-    # plt.ylim([0.6, 1.05])
-    # plt.xlabel('epochs')
-    # plt.ylabel('train accuracy (c)')
-    plt.tight_layout()
-    plt.savefig(os.path.join(result_dir, 'c_accuracy.png'))
-    plt.show()
-
-    # plot train task accuracy
-    plt.figure(figsize=[6, 4])
-    plt.title(f'Train Task Accuracy')
-    sns.lineplot(data=y_train_loss, x='epoch', y='accuracy', hue='Representation')
-    # plt.ylim([0.6, 1.05])
-    # plt.xlabel('epochs')
-    # plt.ylabel('train accuracy (c)')
-    plt.tight_layout()
-    plt.savefig(os.path.join(result_dir, 'y_accuracy.png'))
-    plt.show()
+    # # plot train concept accuracy
+    # plt.figure(figsize=[6, 4])
+    # plt.title(f'Train Concept Accuracy')
+    # sns.lineplot(data=c_train_loss, x='epoch', y='accuracy', hue='Representation')
+    # # plt.ylim([0.6, 1.05])
+    # # plt.xlabel('epochs')
+    # # plt.ylabel('train accuracy (c)')
+    # plt.tight_layout()
+    # plt.savefig(os.path.join(result_dir, 'c_accuracy.png'))
+    # plt.show()
+    #
+    # # plot train task accuracy
+    # plt.figure(figsize=[6, 4])
+    # plt.title(f'Train Task Accuracy')
+    # sns.lineplot(data=y_train_loss, x='epoch', y='accuracy', hue='Representation')
+    # # plt.ylim([0.6, 1.05])
+    # # plt.xlabel('epochs')
+    # # plt.ylabel('train accuracy (c)')
+    # plt.tight_layout()
+    # plt.savefig(os.path.join(result_dir, 'y_accuracy.png'))
+    # plt.show()
 
     return
 
