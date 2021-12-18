@@ -1,19 +1,12 @@
-import copy
 import joblib
 import os
 import numpy as np
-import pandas as pd
 import torch
-import matplotlib.pyplot as plt
-import seaborn as sns
-from sklearn.model_selection import cross_val_score
-from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score
-from sklearn.manifold import TSNE
-from torch.nn import BCELoss, BCEWithLogitsLoss, Sequential, LeakyReLU, Linear
+from torch.nn import BCELoss, Sequential, LeakyReLU, Linear, Sigmoid
 from torch.utils.data import DataLoader, TensorDataset
-from torch_explain.nn import ConceptEmbeddings, context, semantics
+from torch_explain.nn import ConceptEmbeddings, semantics
 import pytorch_lightning as pl
 from pytorch_lightning import seed_everything
 from torch_explain.nn.vector_logic import NeSyLayer, to_boolean
@@ -21,11 +14,12 @@ from torch_explain.nn.vector_logic import NeSyLayer, to_boolean
 
 def generate_data(size):
     # sample from normal distribution
-    v1 = np.random.randn(size, 2) * 2
-    v2 = np.array([1, 1])
-    v3 = np.random.randn(size, 2) * 2
-    v4 = np.array([-1, -1])
-    x = np.hstack([v1, v3])
+    emb_size = 2
+    v1 = np.random.randn(size, emb_size) * 2
+    v2 = np.ones(emb_size)
+    v3 = np.random.randn(size, emb_size) * 2
+    v4 = -np.ones(emb_size)
+    x = np.hstack([v1+v3, v1-v3])
     c = np.stack([
         np.dot(v1, v2).ravel() > 0,
         np.dot(v3, v4).ravel() > 0,
@@ -48,6 +42,8 @@ def main():
     max_epochs = 3000
     gpu = 1
     cv = 5
+    result_dir = './results/toy_vectors_hard/'
+    os.makedirs(result_dir, exist_ok=True)
 
     results = {}
     for split in range(cv):
@@ -72,7 +68,7 @@ def main():
         # freeze model and compute test accuracy
         model_3.freeze()
         c_logits, y_logits = model_3.forward(x_test)
-        c_accuracy_3, y_accuracy_3 = compute_accuracy(torch.sigmoid(c_logits), torch.sigmoid(y_logits), c_test, y_test)
+        c_accuracy_3, y_accuracy_3 = compute_accuracy(c_logits, y_logits, c_test, y_test)
         print(f'c_acc: {c_accuracy_3:.4f}, y_acc: {y_accuracy_3:.4f}')
 
         # train model *with* embeddings (concepts are vectors)
@@ -94,7 +90,7 @@ def main():
         # freeze model and compute test accuracy
         model_1.freeze()
         c_logits_1, y_logits_1 = model_1.forward(x_test)
-        c_accuracy_1, y_accuracy_1 = compute_accuracy(torch.sigmoid(c_logits_1), torch.sigmoid(y_logits_1), c_test, y_test)
+        c_accuracy_1, y_accuracy_1 = compute_accuracy(c_logits_1, y_logits_1, c_test, y_test)
         print(f'c_acc: {c_accuracy_1:.4f}, y_acc: {y_accuracy_1:.4f}')
 
         # model bool
@@ -110,8 +106,8 @@ def main():
         # model embeddings
         c2_train = model_2.x2c_model(x)
         c2_test = model_2.x2c_model(x_test)
-        y2_train = model_2.c2y_model(to_boolean(c2_train, 2, 1))
-        y2_test = model_2.c2y_model(to_boolean(c2_test, 2, 1))
+        y2_train = model_2.c2y_model(to_boolean(c2_train, 2, 1).permute(0, 2, 1)).permute(0, 2, 1)
+        y2_test = model_2.c2y_model(to_boolean(c2_test, 2, 1).permute(0, 2, 1)).permute(0, 2, 1)
 
         results[f'{split}'] = {
             'x_train': x,
@@ -140,9 +136,7 @@ def main():
             'trainable_params_emb': sum(p.numel() for p in model_2.parameters()),
         }
 
-        # create dir and save results
-        result_dir = './results/toy_vectors/'
-        os.makedirs(result_dir, exist_ok=True)
+        # save results
         joblib.dump(results, os.path.join(result_dir, f'results.joblib'))
 
     return
@@ -158,28 +152,37 @@ class TrigoNetEmb(pl.LightningModule):
             LeakyReLU(),
             ConceptEmbeddings(in_features=10, out_features=n_concepts, emb_size=5, bias=True),
         ])
-        self.c2y_model = NeSyLayer(5, n_concepts, 3, n_tasks)
+        # self.c2y_model = NeSyLayer(5, n_concepts, n_concepts, n_tasks)
+        self.c2y_model = Sequential(*[
+            Linear(n_concepts, 50),
+            LeakyReLU(),
+            Linear(50, 20),
+            LeakyReLU(),
+            Linear(20, n_tasks),
+        ])
         self.loss = BCELoss()
         self.loss_list = []
 
     def forward(self, x):
         c = self.x2c_model(x)
-        y = self.c2y_model(to_boolean(c, 2, 1))
+        # y = self.c2y_model(to_boolean(c, 2, 1))
+        y = self.c2y_model(to_boolean(c, 2, 1).permute(0, 2, 1)).permute(0, 2, 1)
         c_sem = semantics(c)
-        y_sem = semantics(y)
+        # y_sem = semantics(y)
+        y_sem = torch.exp(-torch.norm(y, p=2, dim=-1))
         return c_sem, y_sem
 
     def training_step(self, batch, batch_no):
         x, c, y = batch
         c_sem, y_sem = self(x)
-        loss = self.loss(c_sem, c) + self.loss(y_sem.ravel(), y)
+        loss = self.loss(c_sem, c) + 0.5*self.loss(y_sem.ravel(), y)
         c_accuracy, y_accuracy = compute_accuracy(c_sem, y_sem, c, y)
         print(f'Loss {loss:.4f}, c_acc: {c_accuracy:.4f}, y_acc: {y_accuracy:.4f}, ')
         self.loss_list.append([c_accuracy, y_accuracy])
         return loss
 
     def configure_optimizers(self):
-        return torch.optim.Adam(self.parameters(), lr=0.01)
+        return torch.optim.Adam(self.parameters(), lr=0.008)
 
 
 class TrigoNet(pl.LightningModule):
@@ -191,22 +194,24 @@ class TrigoNet(pl.LightningModule):
             Linear(10, 10),
             LeakyReLU(),
             Linear(10, n_concepts),
+            Sigmoid()
         ])
         self.c2y_model = Sequential(*[
-            Linear(n_concepts, 20),
+            Linear(n_concepts, 60),
             LeakyReLU(),
-            Linear(20, 10),
+            Linear(60, 20),
             LeakyReLU(),
-            Linear(10, n_tasks),
+            Linear(20, n_tasks),
+            Sigmoid()
         ])
-        self.loss = BCEWithLogitsLoss()
+        self.loss = BCELoss()
         self.bool = bool
         self.loss_list = []
 
     def forward(self, x):
         c = self.x2c_model(x)
         if self.bool:
-            y = self.c2y_model((c>0).float())
+            y = self.c2y_model((c>0.5).float())
         else:
             y = self.c2y_model(c)
         return c, y
@@ -215,15 +220,15 @@ class TrigoNet(pl.LightningModule):
         x, c, y = batch
         c_logits, y_logits = self(x)
         y_logits = y_logits.reshape(-1)
-        loss = self.loss(c_logits, c) + self.loss(y_logits, y)
+        loss = self.loss(c_logits, c) + 0.5*self.loss(y_logits, y)
         # compute accuracy
-        c_accuracy, y_accuracy = compute_accuracy(torch.sigmoid(c_logits), torch.sigmoid(y_logits), c, y)
+        c_accuracy, y_accuracy = compute_accuracy(c_logits, y_logits, c, y)
         print(f'Loss {loss:.4f}, c_acc: {c_accuracy:.4f}, y_acc: {y_accuracy:.4f}, ')
         self.loss_list.append([c_accuracy, y_accuracy])
         return loss
 
     def configure_optimizers(self):
-        return torch.optim.Adam(self.parameters(), lr=0.01)
+        return torch.optim.Adam(self.parameters(), lr=0.008)
 
 
 def compute_accuracy(c_pred, y_pred, c_true, y_true):
