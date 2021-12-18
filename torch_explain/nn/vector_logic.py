@@ -46,7 +46,7 @@ class NeSyLayer(Module):
 
     def extra_repr(self) -> str:
         return 'emb_size={}, in_concepts={}, bias={}'.format(
-            self.embed_dim, self.in_concepts, self.bias is not None
+            self.emb_size, self.in_concepts, self.bias is not None
         )
 
 
@@ -70,7 +70,7 @@ class NeSyGate(Module):
 
     def extra_repr(self) -> str:
         return 'emb_size={}, out_concepts={}, bias={}'.format(
-            self.embed_dim, self.out_concepts, self.bias is not None
+            self.emb_size, self.out_concepts, self.bias is not None
         )
 
 
