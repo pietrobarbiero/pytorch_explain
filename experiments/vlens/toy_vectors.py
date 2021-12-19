@@ -42,7 +42,7 @@ def main():
     max_epochs = 3000
     gpu = 1
     cv = 5
-    result_dir = './results/toy_vectors_hard/'
+    result_dir = './results/toy_vectors_hard_2/'
     os.makedirs(result_dir, exist_ok=True)
 
     results = {}
@@ -150,7 +150,7 @@ class TrigoNetEmb(pl.LightningModule):
             LeakyReLU(),
             Linear(10, 10),
             LeakyReLU(),
-            ConceptEmbeddings(in_features=10, out_features=n_concepts, emb_size=5, bias=True),
+            ConceptEmbeddings(in_features=10, out_features=n_concepts, emb_size=2, bias=True),
         ])
         # self.c2y_model = NeSyLayer(5, n_concepts, n_concepts, n_tasks)
         self.c2y_model = Sequential(*[
