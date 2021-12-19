@@ -54,6 +54,7 @@ def main():
     batch_size = 3000
     batch_size_test = 1000
     max_epochs = 400
+    gpu = 1
 
     # generate "trigonometric" train data set
     x, c, y = generate_data(batch_size)
@@ -64,10 +65,10 @@ def main():
     # generate "trigonometric" test data set
     x_test, c_test, y_test = generate_data(batch_size_test)
 
-    # train model *without* embeddings (concepts are just scalars)
+    # train model *without* embeddings (concepts are just *Boolean* scalars)
     # train model
-    model_1 = TrigoNet(n_features, n_concepts, n_tasks)
-    trainer = pl.Trainer(gpus=0, max_epochs=max_epochs)
+    model_1 = TrigoNet(n_features, n_concepts, n_tasks, bool=True)
+    trainer = pl.Trainer(gpus=gpu, max_epochs=max_epochs)
     trainer.fit(model_1, train_dl)
     # freeze model and compute test accuracy
     model_1.freeze()
@@ -75,10 +76,21 @@ def main():
     c_accuracy_1, y_accuracy_1 = compute_accuracy(torch.sigmoid(c_logits), torch.sigmoid(y_logits), c_test, y_test)
     print(f'c_acc: {c_accuracy_1:.4f}, y_acc: {y_accuracy_1:.4f}')
 
+    # train model *without* embeddings (concepts are just *fuzzy* scalars)
+    # train model
+    model_3 = TrigoNet(n_features, n_concepts, n_tasks, bool=False)
+    trainer = pl.Trainer(gpus=gpu, max_epochs=max_epochs)
+    trainer.fit(model_3, train_dl)
+    # freeze model and compute test accuracy
+    model_3.freeze()
+    c_logits, y_logits = model_3.forward(x_test)
+    c_accuracy_3, y_accuracy_3 = compute_accuracy(torch.sigmoid(c_logits), torch.sigmoid(y_logits), c_test, y_test)
+    print(f'c_acc: {c_accuracy_3:.4f}, y_acc: {y_accuracy_3:.4f}')
+
     # train model *with* embeddings (concepts are vectors)
     # train model
     model_2 = TrigoNetEmb(n_features, n_concepts, n_tasks)
-    trainer = pl.Trainer(gpus=0, max_epochs=max_epochs)
+    trainer = pl.Trainer(gpus=gpu, max_epochs=max_epochs)
     trainer.fit(model_2, train_dl)
     # freeze model and compute test accuracy
     model_2.freeze()
@@ -97,15 +109,18 @@ def main():
 
     # get train accuracies (both for concepts and for tasks)
     c_train_loss_1, y_train_loss_1 = np.array(model_1.loss_list)[:, 0], np.array(model_1.loss_list)[:, 1]
+    c_train_loss_3, y_train_loss_3 = np.array(model_3.loss_list)[:, 0], np.array(model_3.loss_list)[:, 1]
     c_train_loss_2, y_train_loss_2 = np.array(model_2.loss_list)[:, 0], np.array(model_2.loss_list)[:, 1]
 
     # plot concept accuracy
     epochs = np.arange(len(model_1.loss_list))
     plt.figure()
     plt.title(f'Concept Accuracy\n'
-              f'Test accuracy with "scalar" concepts={c_accuracy_1:.2f} (params: {n_params_model_1})\n'
+              f'Test accuracy with Boolean concepts={c_accuracy_1:.2f} (params: {n_params_model_1})\n'
+              f'Test accuracy with fuzzy concepts={c_accuracy_3:.2f} (params: {n_params_model_1})\n'
               f'Test accuracy with "vector" concepts={c_accuracy_2:.2f} (params: {n_params_model_2})')
-    sns.lineplot(epochs, c_train_loss_1, label='train accuracy "scalar"')
+    sns.lineplot(epochs, c_train_loss_1, label='train accuracy Boolean')
+    sns.lineplot(epochs, c_train_loss_3, label='train accuracy fuzzy')
     sns.lineplot(epochs, c_train_loss_2, label='train accuracy "vector"')
     plt.ylim([0.6, 1.05])
     plt.xlabel('epochs')
@@ -117,9 +132,11 @@ def main():
     # plot task accuracy
     plt.figure()
     plt.title(f'Task Accuracy\n'
-              f'Test accuracy with "scalar" concepts={y_accuracy_1:.2f} (params: {n_params_model_1})'
-              f'\nTest accuracy with "vector" concepts={y_accuracy_2:.2f} (params: {n_params_model_2})')
-    sns.lineplot(epochs, y_train_loss_1, label='train accuracy "scalar"')
+              f'Test accuracy with Boolean concepts={y_accuracy_1:.2f} (params: {n_params_model_1})\n'
+              f'Test accuracy with fuzzy concepts={y_accuracy_3:.2f} (params: {n_params_model_1})\n'
+              f'Test accuracy with "vector" concepts={y_accuracy_2:.2f} (params: {n_params_model_2})')
+    sns.lineplot(epochs, y_train_loss_1, label='train accuracy Boolean')
+    sns.lineplot(epochs, y_train_loss_3, label='train accuracy fuzzy')
     sns.lineplot(epochs, y_train_loss_2, label='train accuracy "vector"')
     plt.ylim([0.6, 1.05])
     plt.xlabel('epochs')
@@ -128,40 +145,64 @@ def main():
     plt.savefig(os.path.join(result_dir, 'y_accuracy.png'))
     plt.show()
 
-    # finally, inspect the "context" of concept embeddings
-    c_emb_test = model_2.x2c_model(x_test)
-    y_emb_test = model_2.c2y_model(c_emb_test)
-    c_ctx = context(c_emb_test)
-    y_ctx = context(y_emb_test).squeeze(1)
-    # reduce dimensionality to get 2D plots
-    c_ctxr = TSNE().fit_transform(c_ctx.reshape(3000, 5))
-    y_ctxr = TSNE().fit_transform(y_ctx)
-    c_ctxrr = c_ctxr.reshape(1000, 3, 2)
+    # # finally, inspect the "context" of concept embeddings
+    # c_emb_test = model_2.x2c_model(x_test)
+    # y_emb_test = model_2.c2y_model(c_emb_test)
+    # c_ctx = context(c_emb_test)
+    # y_ctx = context(y_emb_test).squeeze(1)
+    # # reduce dimensionality to get 2D plots
+    # c_ctxr = TSNE().fit_transform(c_ctx.reshape(3000, 5))
+    # y_ctxr = TSNE().fit_transform(y_ctx)
+    # c_ctxrr = c_ctxr.reshape(1000, 3, 2)
+    #
+    # # plot "context" for concepts
+    # plt.figure()
+    # plt.title(f'Concept "context" (test)')
+    # sns.scatterplot(c_ctxrr[:, 0, 0], c_ctxrr[:, 0, 1], label='concept #1')
+    # sns.scatterplot(c_ctxrr[:, 1, 0], c_ctxrr[:, 1, 1], label='concept #2')
+    # sns.scatterplot(c_ctxrr[:, 2, 0], c_ctxrr[:, 2, 1], label='concept #3')
+    # plt.xlabel('tsne dim #1')
+    # plt.ylabel('tsne dim #2')
+    # plt.tight_layout()
+    # plt.savefig(os.path.join(result_dir, 'c_ctx.png'))
+    # plt.show()
+    #
+    # # plot "context" for tasks
+    # plt.figure()
+    # plt.title(f'Task "context" (test)')
+    # sns.scatterplot(y_ctxr[y_sem[:, 0]>=0.5, 0], y_ctxr[y_sem[:, 0]>=0.5, 1], label='class #1')
+    # sns.scatterplot(y_ctxr[y_sem[:, 0]<0.5, 0], y_ctxr[y_sem[:, 0]<0.5, 1], label='class #2')
+    # plt.xlabel('tsne dim #1')
+    # plt.ylabel('tsne dim #2')
+    # plt.tight_layout()
+    # plt.savefig(os.path.join(result_dir, 'y_ctx.png'))
+    # plt.show()
 
-    # plot "context" for concepts
-    plt.figure()
-    plt.title(f'Concept "context" (test)')
-    sns.scatterplot(c_ctxrr[:, 0, 0], c_ctxrr[:, 0, 1], label='concept #1')
-    sns.scatterplot(c_ctxrr[:, 1, 0], c_ctxrr[:, 1, 1], label='concept #2')
-    sns.scatterplot(c_ctxrr[:, 2, 0], c_ctxrr[:, 2, 1], label='concept #3')
-    plt.xlabel('tsne dim #1')
-    plt.ylabel('tsne dim #2')
-    plt.tight_layout()
-    plt.savefig(os.path.join(result_dir, 'c_ctx.png'))
-    plt.show()
+    # check the accuracy of context and semantics separately (fuzzy)
+    c_emb_train = model_3.x2c_model(x)
+    c_ctx_train = c_emb_train
+    c_sem_train = c_emb_train.cpu().detach() > 0.5
+    c_emb_test = model_3.x2c_model(x_test)
+    c_ctx_test = c_emb_test
+    c_sem_test = c_emb_test.cpu().detach() > 0.5
+    # context only
+    clf = DecisionTreeClassifier(random_state=42)
+    clf.fit(c_ctx_train, y)
+    context_accuracy = clf.score(c_ctx_test, y_test)
+    # semantics only
+    clf.fit(c_sem_train, y)
+    semantics_accuracy = clf.score(c_sem_test, y_test)
+    # context + semantics
+    clf.fit(c_emb_train.reshape(x.shape[0], -1), y)
+    context_semantics_accuracy = clf.score(c_emb_test.reshape(x_test.shape[0], -1), y_test)
+    accuracy_3 = {
+        'context': context_accuracy,
+        'semantics': semantics_accuracy,
+        'context+semantics': context_semantics_accuracy,
+    }
+    print(accuracy_3)
 
-    # plot "context" for tasks
-    plt.figure()
-    plt.title(f'Task "context" (test)')
-    sns.scatterplot(y_ctxr[y_sem[:, 0]>=0.5, 0], y_ctxr[y_sem[:, 0]>=0.5, 1], label='class #1')
-    sns.scatterplot(y_ctxr[y_sem[:, 0]<0.5, 0], y_ctxr[y_sem[:, 0]<0.5, 1], label='class #2')
-    plt.xlabel('tsne dim #1')
-    plt.ylabel('tsne dim #2')
-    plt.tight_layout()
-    plt.savefig(os.path.join(result_dir, 'y_ctx.png'))
-    plt.show()
-
-    # check the accuracy of context and semantics separately
+    # check the accuracy of context and semantics separately (embeddings)
     c_emb_train = model_2.x2c_model(x)
     c_ctx_train = context(c_emb_train).reshape(x.shape[0], -1)
     c_sem_train = semantics(c_emb_train)
@@ -180,14 +221,28 @@ def main():
     # context + semantics
     clf.fit(c_emb_train.reshape(x.shape[0], -1), y)
     context_semantics_accuracy = clf.score(c_emb_test.reshape(x_test.shape[0], -1), y_test)
-    accuracy = {
+    accuracy_1 = {
         'context': context_accuracy,
         'semantics': semantics_accuracy,
         'context+semantics': context_semantics_accuracy,
     }
-    print(accuracy)
-    joblib.dump(accuracy, os.path.join(result_dir, f'{clf.__class__.__name__}_accuracy.joblib'))
+    print(accuracy_1)
 
+    # save results
+    results = {
+        'c_accuracy_1': c_accuracy_1,
+        'c_accuracy_2': c_accuracy_2,
+        'c_accuracy_3': c_accuracy_3,
+        'y_accuracy_1': y_accuracy_1,
+        'y_accuracy_2': y_accuracy_2,
+        'y_accuracy_3': y_accuracy_3,
+        'n_params_model_1': n_params_model_1,
+        'n_params_model_2': n_params_model_2,
+        'fuzzy': accuracy_3,
+        'embeddings': accuracy_1,
+    }
+    print(results)
+    joblib.dump(results, os.path.join(result_dir, f'{clf.__class__.__name__}_accuracy.joblib'))
     return
 
 
@@ -219,7 +274,6 @@ class TrigoNetEmb(pl.LightningModule):
         c_accuracy, y_accuracy = compute_accuracy(c_sem, y_sem, c, y)
         print(f'Loss {loss:.4f}, c_acc: {c_accuracy:.4f}, y_acc: {y_accuracy:.4f}, ')
         self.loss_list.append([c_accuracy, y_accuracy])
-
         return loss
 
     def configure_optimizers(self):
@@ -227,7 +281,7 @@ class TrigoNetEmb(pl.LightningModule):
 
 
 class TrigoNet(pl.LightningModule):
-    def __init__(self, n_features, n_concepts, n_tasks):
+    def __init__(self, n_features, n_concepts, n_tasks, bool):
         super().__init__()
         self.x2c_model = Sequential(*[
             Linear(n_features, 10),
@@ -244,11 +298,15 @@ class TrigoNet(pl.LightningModule):
             Linear(100, n_tasks),
         ])
         self.loss = BCEWithLogitsLoss()
+        self.bool = bool
         self.loss_list = []
 
     def forward(self, x):
         c = self.x2c_model(x)
-        y = self.c2y_model((c>0).float())
+        if self.bool:
+            y = self.c2y_model((c>0).float())
+        else:
+            y = self.c2y_model(c)
         return c, y
 
     def training_step(self, batch, batch_no):
@@ -256,12 +314,10 @@ class TrigoNet(pl.LightningModule):
         c_logits, y_logits = self(x)
         y_logits = y_logits.reshape(-1)
         loss = self.loss(c_logits, c) + self.loss(y_logits, y)
-
         # compute accuracy
         c_accuracy, y_accuracy = compute_accuracy(torch.sigmoid(c_logits), torch.sigmoid(y_logits), c, y)
         print(f'Loss {loss:.4f}, c_acc: {c_accuracy:.4f}, y_acc: {y_accuracy:.4f}, ')
         self.loss_list.append([c_accuracy, y_accuracy])
-
         return loss
 
     def configure_optimizers(self):
