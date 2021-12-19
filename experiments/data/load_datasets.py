@@ -9,7 +9,8 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import cross_val_score, StratifiedShuffleSplit, StratifiedKFold, train_test_split
 from sklearn.preprocessing import MinMaxScaler, KBinsDiscretizer, OneHotEncoder
 from sklearn.tree import DecisionTreeClassifier
-from torchvision.datasets import MNIST
+from torchvision import transforms
+from torchvision.datasets import MNIST, LSUN
 from torch.nn.functional import one_hot
 from torch.utils.data import TensorDataset, DataLoader
 from torchvision.transforms import ToTensor
@@ -220,6 +221,21 @@ def load_mnist(base_dir='./data'):
     x = torch.FloatTensor(x)
     y = one_hot(torch.tensor(y).to(torch.long)).to(torch.float)
     return x, y, concept_names
+
+
+def load_lsun(base_dir='./data', to_one_hot: bool = True):
+    # Compose transforms
+    transform = transforms.Compose([
+        transforms.Resize(128),
+        transforms.CenterCrop(128),
+        transforms.ToTensor()
+    ])
+    train_ds = LSUN("../data/LSUN", classes="train", transform=transform)
+    val_ds = LSUN("../data/LSUN", classes="val", transform=transform)
+    test_ds = LSUN("../data/LSUN", classes="test", transform=transform)
+    concept_names = [f'is{i}' for i in range(10)]
+    label_names = [f"is{i}" for i in range(20)]
+    return #train_data, val_data, test_data, concept_names, class_names
 
 
 def load_vector_mnist(base_dir='./data', to_one_hot: bool = True):
@@ -435,7 +451,7 @@ def load_cub_full(root_dir='./CUB200'):
 
 
 if __name__ == '__main__':
-    train_data, val_data, test_data, concept_names, class_names = load_cub_full()
+    train_data, val_data, test_data, concept_names, class_names = load_lsun()
     # train_data, test_data, concept_names, label_names = load_vector_mnist('.')
     # train_data, val_data, test_data, c_names = load_dsprites('.')
     print('ok!')
