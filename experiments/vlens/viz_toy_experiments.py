@@ -22,7 +22,10 @@ from torch_explain.nn.vector_logic import NeSyLayer, to_boolean
 def main():
     # parameters for data, model, and training
     cv = 5
+    result_dir = './results/toy_xor/'
+    result_dir = './results/toy_trigonometry/'
     result_dir = './results/toy_vectors_hard/'
+    result_dir = './results/toy_vectors_hard_2/'
 
     results = joblib.load(os.path.join(result_dir, f'results.joblib'))
 
