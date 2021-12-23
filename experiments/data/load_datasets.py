@@ -3,6 +3,7 @@ import os
 import pandas as pd
 import numpy as np
 import torch
+import joblib
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.impute import SimpleImputer
 from sklearn.linear_model import LogisticRegression
@@ -14,6 +15,7 @@ from torchvision.datasets import MNIST, LSUN
 from torch.nn.functional import one_hot
 from torch.utils.data import TensorDataset, DataLoader
 from torchvision.transforms import ToTensor
+from torchvision.models import resnet18
 
 from experiments.data.CUB200 import cub_loader
 
@@ -444,14 +446,63 @@ def load_dsprites(dataset_path='./data', c_filter_fn=lambda x: True, filtered_c_
 def load_cub_full(root_dir='./CUB200'):
     concept_names = [str(s) for s in pd.read_csv(f'{root_dir}/attributes.txt', sep=' ', index_col=0, header=None).values.ravel()]
     class_names = [str(s) for s in pd.read_csv(f'{root_dir}/CUB_200_2011/classes.txt', sep=' ', index_col=0, header=None).values.ravel()]
+
+    interm_res = f'{root_dir}/interm_res.joblib'
+    if os.path.exists(interm_res):
+        data = joblib.load(interm_res)
+        return data, concept_names, class_names
+
     train_data = cub_loader.load_data(pkl_paths=[f'{root_dir}/train.pkl'], use_attr=True, no_img=False, batch_size=128, root_dir=root_dir)
     val_data = cub_loader.load_data(pkl_paths=[f'{root_dir}/val.pkl'], use_attr=True, no_img=False, batch_size=128, root_dir=root_dir)
     test_data = cub_loader.load_data(pkl_paths=[f'{root_dir}/test.pkl'], use_attr=True, no_img=False, batch_size=128, root_dir=root_dir)
-    return train_data, val_data, test_data, concept_names, class_names
+
+    # simplify
+    batch_size = 512
+    num_workers = 10
+    model = resnet18(pretrained=True)
+    for param in model.parameters():
+        param.requires_grad = False
+
+    train_dl = DataLoader(train_data, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=True)
+    val_dl = DataLoader(val_data, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=True)
+    test_dl = DataLoader(test_data, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=True)
+
+    x_train, y_train, c_train = give_preds(train_dl, model)
+    x_val, y_val, c_val = give_preds(val_dl, model)
+    x_test, y_test, c_test = give_preds(test_dl, model)
+    data = {
+        'x_train': x_train,
+        'y_train': y_train,
+        'c_train': c_train,
+        'x_val': x_val,
+        'y_val': y_val,
+        'c_val': c_val,
+        'x_test': x_test,
+        'y_test': y_test,
+        'c_test': c_test,
+    }
+    joblib.dump(data, interm_res)
+
+    return data, concept_names, class_names
+
+
+def give_preds(dl, model):
+    xemb, y, c = [], [], []
+    for batch in iter(dl):
+        preds = model(batch[0])
+        xemb.append(preds)
+        y.append(batch[1])
+        c.append(batch[2])
+
+    xemb = torch.vstack(xemb)
+    y = torch.hstack(y)
+    c = torch.vstack(c)
+    return xemb, y, c
 
 
 if __name__ == '__main__':
-    train_data, val_data, test_data, concept_names, class_names = load_lsun()
+    train_data, test_data, concept_names, label_names = load_cub_full()
+    # train_data, val_data, test_data, concept_names, class_names = load_lsun()
     # train_data, test_data, concept_names, label_names = load_vector_mnist('.')
     # train_data, val_data, test_data, c_names = load_dsprites('.')
     print('ok!')
