@@ -67,7 +67,7 @@ def main():
                                                                   results[f'{split}']['y_fuzzy_test'],
                                                                   c_test, y_test)
             c_accuracy_emb, y_accuracy_emb = compute_accuracy(semantics(results[f'{split}']['c_emb_test']),
-                                                              torch.exp(-torch.norm(results[f'{split}']['y_emb_test'], p=2, dim=-1)),
+                                                              results[f'{split}']['y_emb_test'],
                                                               c_test, y_test, emb=True)
             c_test_acc.append(['Embeddings', split, c_accuracy_emb])
             c_test_acc.append(['Fuzzy', split, c_accuracy_fuzzy])
@@ -192,10 +192,10 @@ def main():
 
 
 def compute_accuracy(c_pred, y_pred, c_true, y_true, emb=False):
-    if not emb:
-        c_pred = c_pred.ravel()
-        c_true = c_true.ravel()
-        y_pred = y_pred.argmax(dim=-1)
+    # if not emb:
+    c_pred = c_pred.ravel()
+    c_true = c_true.ravel()
+    y_pred = y_pred.argmax(dim=-1)
     c_pred = c_pred.cpu().detach() > 0.5
     y_pred = y_pred.cpu().detach()
     y_true = y_true.ravel().cpu().detach()

@@ -443,28 +443,33 @@ def load_dsprites(dataset_path='./data', c_filter_fn=lambda x: True, filtered_c_
     return train_data, val_data, test_data, c_names
 
 
-def load_cub_full(root_dir='./CUB200'):
+def load_cub_full(root_dir='./CUB200', pretrain=False, batch_size=128):
     concept_names = [str(s) for s in pd.read_csv(f'{root_dir}/attributes.txt', sep=' ', index_col=0, header=None).values.ravel()]
     class_names = [str(s) for s in pd.read_csv(f'{root_dir}/CUB_200_2011/classes.txt', sep=' ', index_col=0, header=None).values.ravel()]
-
     interm_res = f'{root_dir}/interm_res.joblib'
-    if os.path.exists(interm_res):
+
+    if os.path.exists(interm_res) and pretrain:
         data = joblib.load(interm_res)
         return data, concept_names, class_names
+    if os.path.exists(interm_res) and not pretrain:
+        train_data = cub_loader.load_data(pkl_paths=[f'{root_dir}/train.pkl'], use_attr=True, no_img=False, batch_size=batch_size, root_dir=root_dir)
+        val_data = cub_loader.load_data(pkl_paths=[f'{root_dir}/val.pkl'], use_attr=True, no_img=False, batch_size=batch_size, root_dir=root_dir)
+        test_data = cub_loader.load_data(pkl_paths=[f'{root_dir}/test.pkl'], use_attr=True, no_img=False, batch_size=batch_size, root_dir=root_dir)
+        return train_data, val_data, test_data, concept_names, class_names
 
-    train_data = cub_loader.load_data(pkl_paths=[f'{root_dir}/train.pkl'], use_attr=True, no_img=False, batch_size=128, root_dir=root_dir)
-    val_data = cub_loader.load_data(pkl_paths=[f'{root_dir}/val.pkl'], use_attr=True, no_img=False, batch_size=128, root_dir=root_dir)
-    test_data = cub_loader.load_data(pkl_paths=[f'{root_dir}/test.pkl'], use_attr=True, no_img=False, batch_size=128, root_dir=root_dir)
+    train_data = cub_loader.load_data(pkl_paths=[f'{root_dir}/train.pkl'], use_attr=True, no_img=False, batch_size=batch_size, root_dir=root_dir)
+    val_data = cub_loader.load_data(pkl_paths=[f'{root_dir}/val.pkl'], use_attr=True, no_img=False, batch_size=batch_size, root_dir=root_dir)
+    test_data = cub_loader.load_data(pkl_paths=[f'{root_dir}/test.pkl'], use_attr=True, no_img=False, batch_size=batch_size, root_dir=root_dir)
 
     # simplify
-    batch_size = 512
+    batch_size = 128
     num_workers = 10
     model = resnet18(pretrained=True)
     for param in model.parameters():
         param.requires_grad = False
 
-    train_dl = DataLoader(train_data, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=True)
-    val_dl = DataLoader(val_data, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=True)
+    train_dl = DataLoader(train_data, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=True)
+    val_dl = DataLoader(val_data, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=True)
     test_dl = DataLoader(test_data, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=True)
 
     x_train, y_train, c_train = give_preds(train_dl, model)

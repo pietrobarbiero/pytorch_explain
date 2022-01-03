@@ -1,9 +1,12 @@
 import joblib
 import os
+import sys
+sys.path.append('../../')
+
 import numpy as np
 import torch
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import accuracy_score
+from sklearn.metrics import accuracy_score, f1_score
 from torch.nn import BCELoss, CrossEntropyLoss, Sequential, LeakyReLU, Linear, Sigmoid, Softmax
 from torch.nn.functional import one_hot
 from torchvision.models import resnet18
@@ -14,60 +17,40 @@ from pytorch_lightning import seed_everything
 from torch_explain.nn.vector_logic import NeSyLayer, to_boolean
 from experiments.data.load_datasets import load_cub_full
 
-
-def map_to_emb():
-    batch_size = 512
-    num_workers = 10
-    model = resnet18(pretrained=True)
-    for param in model.parameters():
-        param.requires_grad = False
-
-    train_data, val_data, test_data, concept_names, class_names = load_cub_full('../data/CUB200')
-    train_dl = DataLoader(train_data, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=True)
-    val_dl = DataLoader(val_data, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=True)
-    test_dl = DataLoader(test_data, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=True)
-
-    preds
-
-
-def get_preds(trainer, model, test_dl):
-    preds = trainer.predict(model, test_dl)
-    c_logits, y_logits, c_emb = [], [], []
-    for pred in preds:
-        c_logits.append(pred[0])
-        y_logits.append(pred[1])
-        if len(pred) == 3:
-            c_emb.append(pred[2])
-    c_preds = torch.vstack(c_logits)
-    y_preds = torch.vstack(y_logits)
-    if len(pred) == 3:
-        c_emb = torch.vstack(c_emb)
-    return c_preds, y_preds, c_emb
-
+# os.environ['CUDA_VISIBLE_DEVICES'] = "1"
 
 def main():
-    batch_size = 512
-    num_workers = 10
-    model = resnet18(pretrained=True)
-    for param in model.parameters():
-        param.requires_grad = False
+    batch_size = 256
+    num_workers = 16
+    # model = resnet18(pretrained=True)
+    # for param in model.parameters():
+    #     param.requires_grad = False
 
-    data, concept_names, class_names = load_cub_full('../data/CUB200')
-    train_data = TensorDataset(data['x_train'], data['c_train'], data['y_train'])
-    val_data = TensorDataset(data['x_val'], data['c_val'], data['y_val'])
-    test_data = TensorDataset(data['x_test'], data['c_test'], data['y_test'])
-    train_dl = DataLoader(train_data, batch_size=batch_size)
-    val_dl = DataLoader(val_data, batch_size=batch_size)
-    test_dl = DataLoader(test_data, batch_size=batch_size)
-    n_features, n_concepts, n_tasks = data['x_train'].shape[1], len(concept_names), len(class_names)
-    x_test, c_test, y_test = test_data.tensors
+    train_data, val_data, test_data, concept_names, class_names = load_cub_full('../data/CUB200')
+    sample = next(iter(train_data))
+    n_concepts, n_tasks = sample[2].shape[0], len(class_names)
+    train_dl = DataLoader(train_data, batch_size=batch_size, pin_memory=True, shuffle=True, num_workers=num_workers)
+    val_dl = DataLoader(val_data, batch_size=batch_size, pin_memory=True, num_workers=num_workers)
+    test_dl = DataLoader(test_data, batch_size=batch_size, pin_memory=True, num_workers=num_workers)
+
+    # data, concept_names, class_names = load_cub_full('../data/CUB200')
+    # data['y_train'], data['y_val'], data['y_test'] = one_hot(data['y_train']).float(), one_hot(data['y_val']).float(), one_hot(data['y_test']).float()
+    # train_data = TensorDataset(data['x_train'], data['c_train'], data['y_train'])
+    # val_data = TensorDataset(data['x_val'], data['c_val'], data['y_val'])
+    # test_data = TensorDataset(data['x_test'], data['c_test'], data['y_test'])
+    # train_dl = DataLoader(train_data, batch_size=batch_size, pin_memory=True, shuffle=True)
+    # val_dl = DataLoader(val_data, batch_size=batch_size, pin_memory=True)
+    # test_dl = DataLoader(test_data, batch_size=batch_size, pin_memory=True)
+    # n_features, n_concepts, n_tasks = data['x_train'].shape[1], data['c_train'].shape[1], len(class_names)
+    # x_train, c_train, y_train = train_data.tensors
+    # x_val, c_val, y_val = val_data.tensors
+    # x_test, c_test, y_test = test_data.tensors
 
     # parameters for data, model, and training
-    batch_size = 512
-    max_epochs = 30
+    max_epochs = 3000
     gpu = 1
     cv = 5
-    num_workers = 10
+    # num_workers = 10
     result_dir = './results/cub/'
     os.makedirs(result_dir, exist_ok=True)
 
@@ -79,12 +62,12 @@ def main():
 
         # train model *without* embeddings (concepts are just *fuzzy* scalars)
         # train model
-        model_3 = TrigoNet(n_features, n_concepts, n_tasks, bool=False)
-        trainer = pl.Trainer(gpus=gpu, max_epochs=max_epochs)
+        model_3 = TrigoNet(n_concepts, n_tasks, bool=False)
+        trainer = pl.Trainer(gpus=gpu, max_epochs=max_epochs, check_val_every_n_epoch=5)
         trainer.fit(model_3, train_dl, val_dl)
         # freeze model and compute test accuracy
         model_3.freeze()
-        c_logits, y_logits = model_3.forward(test_data.tensors)
+        c_logits, y_logits = model_3.forward(x_test)
         c_accuracy_3, y_accuracy_3 = compute_accuracy(c_logits, y_logits, c_test, y_test)
         print(f'c_acc: {c_accuracy_3:.4f}, y_acc: {y_accuracy_3:.4f}')
 
@@ -106,19 +89,19 @@ def main():
         trainer.fit(model_1, train_dl, val_dl)
         # freeze model and compute test accuracy
         model_1.freeze()
-        c_logits_1, y_logits_1 = model_1.forward(test_data.tensors)
+        c_logits_1, y_logits_1 = model_1.forward(x_test)
         c_accuracy_1, y_accuracy_1 = compute_accuracy(c_logits_1, y_logits_1, c_test, y_test)
         print(f'c_acc: {c_accuracy_1:.4f}, y_acc: {y_accuracy_1:.4f}')
 
         # model bool
-        c1_train, y1_train = model_3.forward(train_data.tensors)
-        c1_test, y1_test = model_3.forward(train_data.tensors)
+        c1_train, y1_train = model_1.forward(x_train)
+        c1_test, y1_test = model_1.forward(x_test)
         # model fuzzy
-        c3_train, y3_train, _ = get_preds(trainer, model_3, train_dl)
-        c3_test, y3_test, _ = get_preds(trainer, model_3, test_dl)
+        c3_train, y3_train = model_3.forward(x_train)
+        c3_test, y3_test = model_3.forward(x_test)
         # model embeddings
-        c2_train, y2_train, c_emb_train = get_preds(trainer, model_2, train_dl)
-        c2_test, y2_test, c_emb_test = get_preds(trainer, model_2, test_dl)
+        c2_train, y2_train, c_emb_train = model_2.forward(train_data.tensors)
+        c2_test, y2_test, c_emb_test = model_2.forward(test_data.tensors)
 
         results[f'{split}'] = {
             'c_train': c_train,
@@ -146,7 +129,7 @@ def main():
         }
 
         # save results
-        joblib.dump(results, os.path.join(result_dir, f'results.joblib'))
+        # joblib.dump(results, os.path.join(result_dir, f'results.joblib'))
 
     return
 
@@ -155,27 +138,27 @@ class TrigoNetEmb(pl.LightningModule):
     def __init__(self, n_features, n_concepts, n_tasks):
         super().__init__()
         self.x2c_model = Sequential(*[
-            Linear(n_features, 500),
+            Linear(n_features, n_concepts),
             LeakyReLU(),
-            Linear(500, n_concepts),
+            Linear(n_concepts, n_concepts),
             LeakyReLU(),
             ConceptEmbeddings(in_features=n_concepts, out_features=n_concepts, emb_size=5, bias=True),
-            Sigmoid()
+            # Sigmoid()
         ])
         # self.c2y_model = NeSyLayer(5, n_concepts, n_concepts, n_tasks)
         self.c2y_model = Sequential(*[
-            Linear(n_concepts, 250),
+            Linear(n_concepts, n_tasks),
+            # LeakyReLU(),
+            # Linear(250, 250),
             LeakyReLU(),
-            Linear(250, 250),
-            LeakyReLU(),
-            Linear(250, n_tasks),
+            Linear(n_tasks, n_tasks),
         ])
         self.loss = BCELoss()
         self.loss2 = CrossEntropyLoss()
         self.loss_list = []
 
     def forward(self, batch):
-        x, y, c = batch
+        x, _, _ = batch
         c = self.x2c_model(x)
         # y = self.c2y_model(to_boolean(c, 2, 1))
         y = self.c2y_model(to_boolean(c, 2, 1).permute(0, 2, 1)).permute(0, 2, 1)
@@ -185,12 +168,21 @@ class TrigoNetEmb(pl.LightningModule):
         return c_sem, y_sem, c
 
     def training_step(self, batch, batch_no):
-        x, y, c = batch
+        x, c, y = batch
         c_sem, y_sem, _ = self(batch)
-        loss = self.loss(c_sem, c) + 0.1*self.loss2(y_sem, y)
+        loss = self.loss(c_sem, c) + 0.5*self.loss(y_sem, y)
         c_accuracy, y_accuracy = compute_accuracy(c_sem, y_sem, c, y)
         print(f'Loss {loss:.4f}, c_acc: {c_accuracy:.4f}, y_acc: {y_accuracy:.4f}, ')
         self.loss_list.append([c_accuracy, y_accuracy])
+        return loss
+
+    def validation_step(self, batch, batch_no):
+        x, c, y = batch
+        c_sem, y_sem, _ = self(batch)
+        loss = self.loss(c_sem, c) + 0.5*self.loss(y_sem, y)
+        c_accuracy, y_accuracy = compute_accuracy(c_sem, y_sem, c, y)
+        print(f'Validation: Loss {loss:.4f}, c_acc: {c_accuracy:.4f}, y_acc: {y_accuracy:.4f}, ')
+        # self.loss_list.append([c_accuracy, y_accuracy])
         return loss
 
     def configure_optimizers(self):
@@ -198,23 +190,26 @@ class TrigoNetEmb(pl.LightningModule):
 
 
 class TrigoNet(pl.LightningModule):
-    def __init__(self, n_features, n_concepts, n_tasks, bool):
+    def __init__(self, n_concepts, n_tasks, bool):
         super().__init__()
         self.n_concepts = n_concepts
+        model = resnet18(pretrained=True)
+        model.fc = Linear(512, n_concepts)
         self.x2c_model = Sequential(*[
-            Linear(n_features, 500),
-            LeakyReLU(),
-            Linear(500, n_concepts),
-            LeakyReLU(),
-            Linear(in_features=n_concepts, out_features=n_concepts, bias=True),
+            model,
+            # LeakyReLU(),
+            # Linear(2*n_concepts, 2*n_concepts),
+            # LeakyReLU(),
+            # Linear(in_features=2*n_concepts, out_features=n_concepts, bias=True),
             Sigmoid()
         ])
         self.c2y_model = Sequential(*[
-            Linear(n_concepts, 250),
+            Linear(n_concepts, n_tasks),
             LeakyReLU(),
-            Linear(250, 250),
-            LeakyReLU(),
-            Linear(250, n_tasks),
+            # Linear(30, 30),
+            # LeakyReLU(),
+            Linear(n_tasks, n_tasks),
+            # Sigmoid()
             Softmax(dim=-1)
         ])
         self.loss = BCELoss()
@@ -222,8 +217,8 @@ class TrigoNet(pl.LightningModule):
         self.bool = bool
         self.loss_list = []
 
-    def forward(self, batch):
-        x, y, c = batch
+    def forward(self, x):
+        # x, _, _ = batch
         c = self.x2c_model(x)
         if self.bool:
             y = self.c2y_model((c>0.5).float())
@@ -232,26 +227,36 @@ class TrigoNet(pl.LightningModule):
         return c, y
 
     def training_step(self, batch, batch_no):
-        x, c, y = batch
-        c_logits, y_logits = self(batch)
-        loss = self.loss(c_logits, c) + 0.1*self.loss2(y_logits, y)
+        x, y, c = batch
+        c_logits, y_logits = self(x)
+        loss = self.loss(c_logits, c) + 0.5*self.loss2(y_logits, y)
         # compute accuracy
         c_accuracy, y_accuracy = compute_accuracy(c_logits, y_logits, c, y)
         print(f'Loss {loss:.4f}, c_acc: {c_accuracy:.4f}, y_acc: {y_accuracy:.4f}, ')
         self.loss_list.append([c_accuracy, y_accuracy])
         return loss
 
+    def validation_step(self, batch, batch_no):
+        x, y, c = batch
+        c_logits, y_logits = self(x)
+        loss = self.loss(c_logits, c) + 0.5*self.loss2(y_logits, y)
+        # compute accuracy
+        c_accuracy, y_accuracy = compute_accuracy(c_logits, y_logits, c, y)
+        print(f'Validation: Loss {loss:.4f}, c_acc: {c_accuracy:.4f}, y_acc: {y_accuracy:.4f}, ')
+        # self.loss_list.append([c_accuracy, y_accuracy])
+        return loss
+
     def configure_optimizers(self):
-        return torch.optim.Adam(self.parameters(), lr=0.008)
+        return torch.optim.Adam(self.parameters(), lr=0.01)
 
 
 def compute_accuracy(c_pred, y_pred, c_true, y_true):
-    c_pred = c_pred.ravel().cpu().detach() > 0.5
+    c_pred = c_pred.reshape(-1).cpu().detach() > 0.5
     y_pred = y_pred.argmax(dim=-1).cpu().detach()
-    c_true = c_true.ravel().cpu().detach()
-    y_true = y_true.ravel().cpu().detach()
-    c_accuracy = accuracy_score(c_true, c_pred)
-    y_accuracy = accuracy_score(y_true, y_pred)
+    c_true = c_true.reshape(-1).cpu().detach()
+    y_true = y_true.reshape(-1).cpu().detach()
+    c_accuracy = f1_score(c_true, c_pred)
+    y_accuracy = f1_score(y_true, y_pred)
     return c_accuracy, y_accuracy
 
 
