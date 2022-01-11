@@ -35,7 +35,6 @@ def main():
         'xor': [generate_xor(batch_size), generate_xor(batch_size_test), generate_xor(batch_size_test)],
     }
 
-    results = {}
     for dataset_name, dataset in datasets.items():
         result_dir = f'./results/{dataset_name}/'
         os.makedirs(result_dir, exist_ok=True)
@@ -51,6 +50,7 @@ def main():
 
         for model_name, emb_sizes_i in models.items():
             for emb_size in emb_sizes_i:
+                results = {}
                 for split in range(cv):
                     print(f'Experiment {dataset_name} {split+1}/{cv} ({model_name} {emb_size})')
 
@@ -95,7 +95,6 @@ def main():
 
                     results[f'{split}'] = {
                         'dataset_name': dataset_name,
-                        'cv_split': split,
                         'model_name': model_name,
                         'emb_size': emb_size,
                         'x_train': x_train,
