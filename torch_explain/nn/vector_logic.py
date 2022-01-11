@@ -5,15 +5,64 @@ from torch.nn import Linear, Parameter, Module, MultiheadAttention, Module, init
 from torch import Tensor
 from torch.nn import functional as F
 
+def embedding_to_nesyemb(embedding: Tensor, eps: float = 1e-5) -> Tensor:
+    embedding_norm = embedding.norm(dim=-1).unsqueeze(dim=-1)
+    return embedding / (embedding_norm + eps) * (
+        1.0 - torch.exp(-embedding_norm)
+    )
+
+
+def context(embedding: Tensor) -> Tensor:
+    return embedding / torch.norm(embedding, p=2, dim=-1).unsqueeze(-1)
+
+
+def logprobs(embedding: Tensor) -> Tensor:
+    return torch.norm(embedding, p=2, dim=-1)
+
+
+def semantics(embedding: Tensor) -> Tensor:
+    return F.relu(torch.norm(embedding, dim=-1) - 1)
+
+
+def to_boolean(
+    embedding: Tensor,
+    true_norm: float = 0,
+    false_norm: float = 1
+) -> Tensor:
+    sm = torch.round(semantics(embedding))
+    sm[sm != 0] = false_norm
+    sm[sm == 0] = true_norm
+    ct = context(embedding)
+    return ct * sm.unsqueeze(-1)
+
 
 class ConceptEmbeddings(Linear):
-    def __init__(self, in_features: int, out_features: int, emb_size: int, bias: bool = True,
-                 device=None, dtype=None) -> None:
+    def __init__(
+        self,
+        in_features: int,
+        out_features: int,
+        emb_size: int,
+        bias: bool = True,
+        device=None,
+        dtype=None
+    ) -> None:
         factory_kwargs = {'device': device, 'dtype': dtype}
-        super(ConceptEmbeddings, self).__init__(in_features, out_features, bias, device, dtype)
-        self.weight = Parameter(torch.empty((out_features, in_features, emb_size), **factory_kwargs))
+        super(ConceptEmbeddings, self).__init__(
+            in_features=in_features,
+            out_features=out_features,
+            bias=bias,
+            device=device,
+            dtype=dtype,
+        )
+        self.weight = Parameter(torch.empty(
+            (out_features, in_features, emb_size),
+            **factory_kwargs
+        ))
         if bias:
-            self.bias = Parameter(torch.empty(out_features, emb_size, **factory_kwargs))
+            self.bias = Parameter(torch.empty(
+                (out_features, emb_size),
+                **factory_kwargs
+            ))
         else:
             self.register_parameter('bias', None)
         self.reset_parameters()
@@ -73,30 +122,6 @@ class NeSyGate(Module):
             self.emb_size, self.out_concepts, self.bias is not None
         )
 
-
-def embedding_to_nesyemb(embedding: Tensor) -> Tensor:
-    embedding_norm = embedding.norm(dim=-1).unsqueeze(dim=-1)
-    return embedding / embedding_norm * (torch.exp(-embedding_norm) + 1)
-
-
-def context(embedding: Tensor) -> Tensor:
-    return embedding / torch.norm(embedding, p=2, dim=-1).unsqueeze(-1)
-
-
-def logprobs(embedding: Tensor) -> Tensor:
-    return torch.norm(embedding, p=2, dim=-1)
-
-
-def semantics(embedding: Tensor) -> Tensor:
-    return F.relu(torch.norm(embedding, dim=-1) - 1) #torch.exp(-torch.norm(embedding, p=2, dim=-1))
-
-
-def to_boolean(embedding: Tensor, true_norm: float = 0, false_norm: float = 1) -> Tensor:
-    sm = torch.round(semantics(embedding))
-    sm[sm != 0] = false_norm
-    sm[sm == 0] = true_norm
-    ct = context(embedding)
-    return ct * sm.unsqueeze(-1)
 
 
 if __name__ == '__main__':

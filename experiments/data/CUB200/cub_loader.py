@@ -8,7 +8,6 @@ import numpy as np
 import torchvision.transforms as transforms
 
 from PIL import Image
-from torch.nn.functional import one_hot
 from torch.utils.data import BatchSampler
 from torch.utils.data import Dataset, DataLoader
 
@@ -28,7 +27,7 @@ class CUBDataset(Dataset):
     Returns a compatible Torch Dataset object customized for the CUB dataset
     """
 
-    def __init__(self, pkl_file_paths, use_attr, no_img, uncertain_label, image_dir, n_class_attr, root_dir, transform=None):
+    def __init__(self, pkl_file_paths, use_attr, no_img, uncertain_label, image_dir, n_class_attr, root_dir='../data/CUB200/', transform=None):
         """
         Arguments:
         pkl_file_paths: list of full path to all the pkl data
@@ -59,6 +58,10 @@ class CUBDataset(Dataset):
     def __getitem__(self, idx):
         img_data = self.data[idx]
         img_path = img_data['img_path']
+        img_path = img_path.replace(
+            '/juice/scr/scr102/scr/thaonguyen/CUB_supervision/datasets/',
+            '../data/CUB200/'
+        )
         # Trim unnecessary paths
         try:
             idx = img_path.split('/').index('CUB_200_2011')
@@ -139,50 +142,68 @@ class ImbalancedDatasetSampler(torch.utils.data.sampler.Sampler):
         return self.num_samples
 
 
-def load_data(pkl_paths, use_attr, no_img, batch_size, uncertain_label=False, n_class_attr=2,
-              image_dir='images', resampling=False, resol=299, root_dir='CUB200'):
+def load_data(
+    pkl_paths,
+    use_attr,
+    no_img,
+    batch_size,
+    uncertain_label=False,
+    n_class_attr=2,
+    image_dir='images',
+    resampling=False,
+    resol=299,
+    root_dir='../data/CUB200/',
+    num_workers=num_workers,
+):
     """
     Note: Inception needs (299,299,3) images with inputs scaled between -1 and 1
     Loads data with transformations applied, and upsample the minority class if there is class imbalance and weighted loss is not used
     NOTE: resampling is customized for first attribute only, so change sampler.py if necessary
     """
-    image_dir = os.path.join(root_dir, image_dir)
-
-    resized_resol = int(resol * 256 / 224)
+    resized_resol = int(resol * 256/224)
     is_training = any(['train.pkl' in f for f in pkl_paths])
     if is_training:
         transform = transforms.Compose([
-            # transforms.Resize((resized_resol, resized_resol)),
-            # transforms.RandomSizedCrop(resol),
-            transforms.ColorJitter(brightness=32 / 255, saturation=(0.5, 1.5)),
+            #transforms.Resize((resized_resol, resized_resol)),
+            #transforms.RandomSizedCrop(resol),
+            transforms.ColorJitter(brightness=32/255, saturation=(0.5, 1.5)),
             transforms.RandomResizedCrop(resol),
             transforms.RandomHorizontalFlip(),
-            transforms.ToTensor(),  # implicitly divides by 255
-            transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[2, 2, 2])
-            # transforms.Normalize(mean = [ 0.485, 0.456, 0.406 ], std = [ 0.229, 0.224, 0.225 ]),
-        ])
+            transforms.ToTensor(), #implicitly divides by 255
+            transforms.Normalize(mean = [0.5, 0.5, 0.5], std = [2, 2, 2])
+            #transforms.Normalize(mean = [ 0.485, 0.456, 0.406 ], std = [ 0.229, 0.224, 0.225 ]),
+            ])
     else:
         transform = transforms.Compose([
-            # transforms.Resize((resized_resol, resized_resol)),
+            #transforms.Resize((resized_resol, resized_resol)),
             transforms.CenterCrop(resol),
-            transforms.ToTensor(),  # implicitly divides by 255
-            transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[2, 2, 2])
-            # transforms.Normalize(mean = [ 0.485, 0.456, 0.406 ], std = [ 0.229, 0.224, 0.225 ]),
-        ])
+            transforms.ToTensor(), #implicitly divides by 255
+            transforms.Normalize(mean = [0.5, 0.5, 0.5], std = [2, 2, 2])
+            #transforms.Normalize(mean = [ 0.485, 0.456, 0.406 ], std = [ 0.229, 0.224, 0.225 ]),
+            ])
 
-    dataset = CUBDataset(pkl_paths, use_attr, no_img, uncertain_label, image_dir, n_class_attr, root_dir, transform)
-    # if is_training:
-    #     drop_last = True
-    #     shuffle = True
-    # else:
-    #     drop_last = False
-    #     shuffle = False
-    # if resampling:
-    #     sampler = BatchSampler(ImbalancedDatasetSampler(dataset), batch_size=batch_size, drop_last=drop_last)
-    #     loader = DataLoader(dataset, batch_sampler=sampler)
-    # else:
-    #     loader = DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, drop_last=drop_last)
-    return dataset
+    dataset = CUBDataset(
+        pkl_file_paths=pkl_paths,
+        use_attr=use_attr,
+        no_img=no_img,
+        uncertain_label=uncertain_label,
+        image_dir=image_dir,
+        n_class_attr=n_class_attr,
+        transform=transform,
+        root_dir=root_dir,
+    )
+    if is_training:
+        drop_last = True
+        shuffle = True
+    else:
+        drop_last = False
+        shuffle = False
+    if resampling:
+        sampler = BatchSampler(ImbalancedDatasetSampler(dataset), batch_size=batch_size, drop_last=drop_last)
+        loader = DataLoader(dataset, batch_sampler=sampler, num_workers=num_workers)
+    else:
+        loader = DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, drop_last=drop_last, num_workers=num_workers)
+    return loader
 
 def find_class_imbalance(pkl_file, multiple_attr=False, attr_idx=-1):
     """
