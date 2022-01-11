@@ -20,7 +20,8 @@ class ConceptEmbeddings(Linear):
 
     def forward(self, input: Tensor) -> Tensor:
         h = (input @ self.weight).permute(1, 0, 2) + self.bias
-        return embedding_to_nesyemb(h)
+        # return embedding_to_nesyemb(h)
+        return h.permute(0, 2, 1)
 
 
 class NeSyLayer(Module):
@@ -75,8 +76,9 @@ class NeSyGate(Module):
 
 
 def embedding_to_nesyemb(embedding: Tensor) -> Tensor:
+    embedding = embedding.permute(0, 2, 1)
     embedding_norm = embedding.norm(dim=-1).unsqueeze(dim=-1)
-    return embedding / embedding_norm * (torch.exp(-embedding_norm) + 1)
+    return embedding / embedding_norm * (torch.exp(-embedding_norm))
 
 
 def context(embedding: Tensor) -> Tensor:
@@ -88,7 +90,9 @@ def logprobs(embedding: Tensor) -> Tensor:
 
 
 def semantics(embedding: Tensor) -> Tensor:
-    return F.relu(torch.norm(embedding, dim=-1) - 1) #torch.exp(-torch.norm(embedding, p=2, dim=-1))
+    return torch.norm(embedding, dim=-1) #torch.exp(-torch.norm(embedding, p=2, dim=-1))
+    # return torch.norm(embedding, dim=-1).log().sigmoid()
+    # return torch.exp(-torch.norm(embedding, dim=-1))
 
 
 def to_boolean(embedding: Tensor, true_norm: float = 0, false_norm: float = 1) -> Tensor:
