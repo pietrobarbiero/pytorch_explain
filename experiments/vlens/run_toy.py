@@ -11,7 +11,7 @@ from experiments.vlens.networks_toy import compute_accuracy, ToyNetEmbNorm, ToyN
 
 
 def main():
-    shutil.rmtree('./results/', ignore_errors=True)
+    # shutil.rmtree('./results/', ignore_errors=True)
 
     # parameters for data, model, and training
     batch_size = 3000
