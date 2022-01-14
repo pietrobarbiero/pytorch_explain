@@ -24,7 +24,7 @@ def main():
     # parameters for data, model, and training
     cv = 5
     emb_sizes = [2, 10, 50]
-    sns.set(font_scale=1.4)
+    sns.set(font_scale=1.3)
     sns.set_style('whitegrid')
     figsize = [9, 4]
 
@@ -36,9 +36,9 @@ def main():
     methods = {
         'embedding_plane': ['Plane', 4],
         'embedding_norm': ['Norm', 3],
-        'fuzzy_extra': ['Fuzzy+', 2],
+        'fuzzy_extra': ['Fuzzy+EC', 2],
         'fuzzy': ['Fuzzy', 1],
-        'bool': ['Bool', 0],
+        'bool': ['Boolean', 0],
     }
 
     train_loss_df = pd.DataFrame()
@@ -53,6 +53,7 @@ def main():
             results = joblib.load(results_file)
             for split in range(cv):
                 method_name, method_order = methods[results[f'{split}']['model_name']]
+                # if method_name == 'Plane':
                 emb_size = results[f'{split}']['emb_size']
 
                 # test accuracy
@@ -64,7 +65,7 @@ def main():
                                                           results[f'{split}']['y_test_pred'],
                                                           c_test, y_test)
                 # check the test accuracy of context and semantics separately
-                clf = RandomForestClassifier(random_state=42)
+                clf = DecisionTreeClassifier(random_state=42)
                 # context accuracy
                 c_train_pred = results[f'{split}']['y_train_pred_full'].detach()
                 c_train_pred = c_train_pred.reshape(c_train_pred.shape[0], -1)
@@ -129,29 +130,29 @@ def main():
     test_acc_df = test_acc_df.sort_values(['Order', 'method', 'Embedding size'])
     test_acc_df2 = test_acc_df[(test_acc_df['Embedding size'] != 2) & (test_acc_df['Embedding size'] != 10)]
 
-    # plot test concept accuracy
-    plt.figure()
-    g = sns.catplot(data=test_acc_df, kind="box", x='method', y='Accuracy c',
-                    hue='Embedding size', col="Dataset", legend=False, height=3.2, aspect=1.5)
-    plt.ylim([0.7, 1.0])
-    g.set_xlabels('')
-    g.set_ylabels('concept accuracy')
-    plt.tight_layout()
-    plt.savefig(os.path.join('./results', 'c_accuracy_test.png'))
-    plt.savefig(os.path.join('./results', 'c_accuracy_test.pdf'))
-    plt.show()
-
-    # plot test task accuracy
-    plt.figure()
-    g = sns.catplot(data=test_acc_df, kind="bar", x='method', y='Accuracy y',
-                    hue='Embedding size', col="Dataset", legend=False, height=3.2, aspect=1.5)
-    plt.ylim([0.7, 1.0])
-    g.set_xlabels('')
-    g.set_ylabels('task accuracy')
-    plt.tight_layout()
-    plt.savefig(os.path.join('./results', 'y_accuracy_test.png'))
-    plt.savefig(os.path.join('./results', 'y_accuracy_test.pdf'))
-    plt.show()
+    # # plot test concept accuracy
+    # plt.figure()
+    # g = sns.catplot(data=test_acc_df, kind="box", x='method', y='Accuracy c',
+    #                 hue='Embedding size', col="Dataset", legend=False, height=3.2, aspect=1.5)
+    # plt.ylim([0.7, 1.0])
+    # g.set_xlabels('')
+    # g.set_ylabels('concept accuracy')
+    # plt.tight_layout()
+    # plt.savefig(os.path.join('./results', 'c_accuracy_test.png'))
+    # plt.savefig(os.path.join('./results', 'c_accuracy_test.pdf'))
+    # plt.show()
+    #
+    # # plot test task accuracy
+    # plt.figure()
+    # g = sns.catplot(data=test_acc_df, kind="bar", x='method', y='Accuracy y',
+    #                 hue='Embedding size', col="Dataset", legend=False, height=3.2, aspect=1.5)
+    # plt.ylim([0.7, 1.0])
+    # g.set_xlabels('')
+    # g.set_ylabels('task accuracy')
+    # plt.tight_layout()
+    # plt.savefig(os.path.join('./results', 'y_accuracy_test.png'))
+    # plt.savefig(os.path.join('./results', 'y_accuracy_test.pdf'))
+    # plt.show()
 
     # plot test concept accuracy
     plt.figure()
@@ -181,9 +182,9 @@ def main():
     context_df.columns = ['Accuracy', 'split', 'method', 'Embedding size', 'Dataset', 'Order']
     fuzzy_df.columns = ['Accuracy', 'split', 'method', 'Embedding size', 'Dataset', 'Order']
     boolean_df.columns = ['Accuracy', 'split', 'method', 'Embedding size', 'Dataset', 'Order']
-    context_df['Representation'] = 'Full'
-    fuzzy_df['Representation'] = 'Fuzzy'
-    boolean_df['Representation'] = 'Bool'
+    context_df['Representation'] = 'Neural-Symbolic'
+    fuzzy_df['Representation'] = 'Probabilistic'
+    boolean_df['Representation'] = 'Boolean'
     context_df['Order2'] = 2
     fuzzy_df['Order2'] = 1
     boolean_df['Order2'] = 0
@@ -198,7 +199,7 @@ def main():
     g = sns.catplot(data=repr_accuracy, kind="bar", x='Representation', y='Accuracy',
                     hue='method', col="Dataset", legend=False, height=3.2, aspect=1.5)
     plt.ylim([0.6, 1.0])
-    g.set_xlabels('')
+    g.set_xlabels('Inference')
     g.set_ylabels('task accuracy')
     # g.legend.set_legend(loc='upper center', bbox_to_anchor=(0.5, -0.25), ncol=3)
     plt.tight_layout()
@@ -206,14 +207,14 @@ def main():
     plt.savefig(os.path.join('./results', 'repr_accuracy_test.pdf'))
     plt.show()
 
-    # draw legend (to be cropped)
-    plt.figure()
-    g = sns.barplot(data=test_acc_df, x='method', y='Accuracy y', hue='Embedding size')
-    plt.legend(loc='upper center', bbox_to_anchor=(0.5, -0.25), ncol=4)
-    plt.tight_layout()
-    plt.savefig(os.path.join('./results', 'legend.png'), bbox_inches=[])
-    # plt.savefig(os.path.join('./results', 'legend.pdf'), bbox_inches=)
-    plt.show()
+    # # draw legend (to be cropped)
+    # plt.figure()
+    # g = sns.barplot(data=test_acc_df, x='method', y='Accuracy y', hue='Embedding size')
+    # plt.legend(loc='upper center', bbox_to_anchor=(0.5, -0.25), ncol=4)
+    # plt.tight_layout()
+    # plt.savefig(os.path.join('./results', 'legend.png'), bbox_inches=[])
+    # # plt.savefig(os.path.join('./results', 'legend.pdf'), bbox_inches=)
+    # plt.show()
 
 
         # c_train_loss = pd.DataFrame(c_train_loss, columns=['Representation', 'cv_split', 'epoch', 'train accuracy'])
