@@ -10,6 +10,8 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import cross_val_score, StratifiedShuffleSplit, StratifiedKFold, train_test_split
 from sklearn.preprocessing import MinMaxScaler, KBinsDiscretizer, OneHotEncoder
 from sklearn.tree import DecisionTreeClassifier
+from torch.nn.functional import one_hot
+import torchvision
 from torchvision import transforms
 from torchvision.datasets import MNIST, LSUN
 from torch.nn.functional import one_hot
@@ -18,6 +20,7 @@ from torchvision.transforms import ToTensor
 from torchvision.models import resnet18
 
 from experiments.data.CUB200 import cub_loader
+from experiments.data.mnist_polythetic import mnist_poly
 
 
 def load_mimic(base_dir: str = './data/'):
@@ -508,16 +511,16 @@ def give_preds(dl, model):
 def generate_dot(size):
     # sample from normal distribution
     emb_size = 2
-    v1 = np.random.randn(size, emb_size) * 2
-    v2 = np.ones(emb_size)
-    v3 = np.random.randn(size, emb_size) * 2
-    v4 = -np.ones(emb_size)
-    x = np.hstack([v1+v3, v1-v3])
+    apple = np.random.randn(size, emb_size) * 2
+    kitchen = np.ones(emb_size)
+    mouth = np.random.randn(size, emb_size) * 2
+    outside = -np.ones(emb_size)
+    x = np.hstack([apple-mouth, mouth+mouth])
     c = np.stack([
-        np.dot(v1, v2).ravel() > 0,
-        np.dot(v3, v4).ravel() > 0,
+        np.dot(apple, kitchen).ravel() > 0, # is the apple in the kitchen?
+        np.dot(mouth, outside).ravel() > 0, # is the person outside?
     ]).T
-    y = (v1*v3).sum(axis=-1) > 0
+    y = (apple*mouth).sum(axis=-1) > 0  # is the apple close to the mouth?
 
     # clf = RandomForestClassifier(random_state=42)
     # cross_val_score(clf, x, c)
@@ -526,6 +529,71 @@ def generate_dot(size):
     c = torch.FloatTensor(c)
     y = torch.FloatTensor(y)
     return x, c, y
+
+
+def load_mnist_poly(path="../data/mnist"):
+    examples_per_group = 900
+    groups_per_class = 2
+    examples_per_class = examples_per_group * groups_per_class
+
+    train_dataset = MNIST(path, train=True, download=True, transform=None)
+    x_val = train_dataset.data[50000:]
+    x_train = train_dataset.data[:50000]
+    y_val = train_dataset.targets[50000:]  # Digits
+    y_train = train_dataset.targets[:50000]
+
+    # Specify w and h of extended dataset
+    w, h = x_train[0].shape
+    input_shape = (2 * w, 2 * h, 3)  # Quadrant augmentations
+
+    # Compute cartesian product of all digits, colors, and quadrants
+    digits = np.arange(len(train_dataset.classes))
+    colors = ['red', 'green', 'blue']
+    quadrants = [1, 2, 3, 4]
+    aux = [digits, digits, digits, digits, np.arange(len(colors)),
+                np.arange(len(colors)), np.arange(len(colors)), np.arange(len(colors))]
+
+    train_class_bools = [y_train == c for c in digits]
+    val_class_bools = [y_val == c for c in digits]
+    train_digit_idx = [torch.arange(y_train.size(0))[b] for b in train_class_bools]
+    val_digit_idx = [torch.arange(y_val.size(0))[b] for b in val_class_bools]
+
+    nb_classes = 2
+
+    train_data, train_concepts, train_labels = mnist_poly.mnist_poly_task(x_train, y_train, train_digit_idx, groups_per_class,
+                                                        examples_per_group, examples_per_class,
+                                                        aux, xor_task=True, prob_xor=0.5)
+    val_data, val_concepts, val_labels = mnist_poly.mnist_poly_task(x_val, y_val, val_digit_idx, groups_per_class,
+                                                  examples_per_group, examples_per_class,
+                                                  aux, xor_task=True, prob_xor=0.5)
+
+    return train_data, train_concepts, train_labels, val_data, val_concepts, val_labels
+
+
+# def generate_vsum(size=3000, emb_size=2):
+#     # sample from normal distribution
+#     dt = 2
+#     xy0 = np.random.randn(size, 2) + np.random.randint(0, 5, (size, 1))
+#     dxy_p1 = np.random.randn(size, 2) + np.random.randint(1, 3, (size, 1))
+#     v_p1 = (xy0 + dxy_p1) / dt
+#     dxy_p2 = np.random.randn(size, 2) - np.random.randint(1, 3, (size, 1))
+#     v_p2 = (xy0 + dxy_p2) / dt
+#     v_p2_tot = v_p1 + v_p2
+#     p2_faster_p1 = ((v_p2_tot > v_p1).sum(axis=-1) > 1).sum()
+#
+#     x = np.hstack([apple, mouth])
+#     c = np.hstack([has_apple, has_mouth])
+#     y = (has_apple * has_mouth * is_inside).squeeze()
+#
+#     # clf = RandomForestClassifier(random_state=42)
+#     # cross_val_score(clf, x, c)
+#     # cross_val_score(clf, x, y)
+#     # cross_val_score(clf, c, y)
+#
+#     x = torch.FloatTensor(x)
+#     c = torch.FloatTensor(c)
+#     y = torch.FloatTensor(y)
+#     return x, c, y
 
 
 def generate_trigonometry(size):
@@ -585,7 +653,8 @@ def generate_xor(size):
 
 
 if __name__ == '__main__':
-    train_data, test_data, concept_names, label_names = load_cub_full()
+    train_data, train_concepts, train_labels, val_data, val_concepts, val_labels = load_mnist_poly()
+    # train_data, test_data, concept_names, label_names = load_cub_full()
     # train_data, val_data, test_data, concept_names, class_names = load_lsun()
     # train_data, test_data, concept_names, label_names = load_vector_mnist('.')
     # train_data, val_data, test_data, c_names = load_dsprites('.')
