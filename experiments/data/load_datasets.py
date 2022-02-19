@@ -532,7 +532,7 @@ def generate_dot(size):
 
 
 def load_mnist_poly(path="../data/mnist"):
-    examples_per_group = 900
+    examples_per_group = 5000
     groups_per_class = 2
     examples_per_class = examples_per_group * groups_per_class
 

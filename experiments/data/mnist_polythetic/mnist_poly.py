@@ -51,20 +51,13 @@ def transform_background(img, color):
 
 def select_digits(x, digit_idx, g, examples_per_group):
     if g == -1:
-        idxs = np.random.choice(x.shape[0], examples_per_group, replace=False)
+        idxs = np.random.choice(x.shape[0], examples_per_group, replace=True)
     else:
-        idxs = np.random.choice(digit_idx[g], examples_per_group, replace=False)
+        idxs = np.random.choice(digit_idx[g], examples_per_group, replace=True)
     return idxs
     # selected_xs = x[idxs][..., None].numpy()
     # return selected_xs
 
-def select_digits2(x, digit_idx, g, examples_per_group):
-    if g == -1:
-        idxs = np.random.choice(x.shape[0], examples_per_group, replace=False)
-    else:
-        idxs = np.random.choice(digit_idx[g], examples_per_group, replace=False)
-    selected_xs = x[idxs][..., None].numpy()
-    return selected_xs
 
 def select_colors(selected_xs, g, examples_per_group):
     if g == -1:
@@ -133,4 +126,4 @@ def mnist_poly_task(x, y, digit_idx, groups_per_class, examples_per_group, examp
     colors_1h = np.hstack([one_hot(torch.LongTensor(c), np.max(colors)+1) for c in colors.T])
     concepts_1h = np.hstack([digits_1h, colors_1h])
 
-    return data, concepts_1h, labels
+    return torch.FloatTensor(data), torch.FloatTensor(concepts_1h), torch.FloatTensor(labels)
