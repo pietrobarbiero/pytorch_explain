@@ -7,7 +7,8 @@ import pytorch_lightning as pl
 from pytorch_lightning import seed_everything
 
 from experiments.data.load_datasets import generate_dot, generate_trigonometry, generate_xor
-from experiments.vlens.networks_toy import compute_accuracy, ToyNetEmbNorm, ToyNetEmbPlane, ToyNetFuzzyExtra, ToyNetFuzzy, ToyNetBool
+from experiments.vlens.networks_toy import compute_accuracy, ToyNetEmbNorm, ToyNetEmbPlane, ToyNetFuzzyExtra, \
+    ToyNetFuzzy, ToyNetBool
 
 
 def main():
@@ -28,7 +29,6 @@ def main():
         'fuzzy': [1],
         'bool': [1],
     }
-    # model_names = ['embedding_plane']
     datasets = {
         'dot': [generate_dot(batch_size), generate_dot(batch_size_test), generate_dot(batch_size_test)],
         'trigonometry': [generate_trigonometry(batch_size), generate_trigonometry(batch_size_test), generate_trigonometry(batch_size_test)],
@@ -52,7 +52,7 @@ def main():
             for emb_size in emb_sizes_i:
                 results = {}
                 for split in range(cv):
-                    print(f'Experiment {dataset_name} {split+1}/{cv} ({model_name} {emb_size})')
+                    print(f'Experiment {dataset_name} {split + 1}/{cv} ({model_name} {emb_size})')
 
                     seed_everything(split)
 
@@ -85,13 +85,13 @@ def main():
                     # freeze model and compute test accuracy
                     model.freeze()
                     model_loaded = model.__class__.load_from_checkpoint(os.path.join(result_dir, f"{model_name}-{emb_size}-{split}.ckpt"))
-                    c_sem, y_sem, _, _ = model_loaded.forward(x_test)
+                    c_sem, y_sem, _, _, _, _ = model_loaded.forward(x_test)
                     c_accuracy, y_accuracy = compute_accuracy(c_sem, y_sem, c_test, y_test)
                     print(f'c_acc: {c_accuracy:.4f}, y_acc: {y_accuracy:.4f}')
 
                     # model embeddings
-                    c_train_pred, y_train_pred, c_train_pred_full, y_train_pred_full = model_loaded.forward(x_train)
-                    c_test_pred, y_test_pred, c_test_pred_full, y_test_pred_full = model_loaded.forward(x_test)
+                    c_train_pred, y_train_pred, c_train_pred_full, y_train_pred_full, c_train_logits, y_train_logits = model_loaded.forward(x_train)
+                    c_test_pred, y_test_pred, c_test_pred_full, y_test_pred_full, c_test_logits, y_test_logits = model_loaded.forward(x_test)
 
                     results[f'{split}'] = {
                         'dataset_name': dataset_name,
@@ -111,6 +111,10 @@ def main():
                         f'c_test_pred_full': c_test_pred_full,
                         f'y_train_pred_full': y_train_pred_full,
                         f'y_test_pred_full': y_test_pred_full,
+                        f'c_train_logits': c_train_logits,
+                        f'y_train_logits': y_train_logits,
+                        f'c_test_logits': c_test_logits,
+                        f'y_test_logits': y_test_logits,
                         f'train_loss': model.train_loss,
                         f'val_loss': model.val_loss,
                         f'train_accuracy': model.train_accuracy,

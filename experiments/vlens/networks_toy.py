@@ -12,24 +12,21 @@ class ToyNetEmbPlane(pl.LightningModule):
     def __init__(self, n_features, n_concepts, n_tasks, emb_size):
         super().__init__()
         self.save_hyperparameters()
-        self.x2c_model = Sequential(*[
+        self.x2c_model = Sequential(
             Linear(n_features, 10),
             LeakyReLU(),
             Linear(10, 10),
             LeakyReLU(),
             ConceptEmbeddings(in_features=10, out_features=n_concepts, emb_size=emb_size, bias=True),
-        ])
-        self.c2y_model = Sequential(*[
+        )
+        self.c2y_model = Sequential(
             Linear(n_concepts, 50),
             LeakyReLU(),
             Linear(50, 20),
             LeakyReLU(),
             Linear(20, n_tasks),
-        ])
-        self.emb2label = Sequential(*[
-            Linear(emb_size, 1),
-            Sigmoid(),
-        ])
+        )
+        self.emb2label = Linear(emb_size, 1, bias=False)
         self.loss_form = BCELoss()
         self.train_loss = []
         self.train_accuracy = []
@@ -38,10 +35,12 @@ class ToyNetEmbPlane(pl.LightningModule):
 
     def forward(self, x):
         c = self.x2c_model(x)
-        c_sem = self.emb2label(c.permute(0, 2, 1).reshape(c.shape[0] * c.shape[2], -1))
+        c_logit = self.emb2label(c.permute(0, 2, 1).reshape(c.shape[0] * c.shape[2], -1))
+        c_sem = c_logit.sigmoid()
         y = self.c2y_model(c)
-        y_sem = self.emb2label(y.reshape(y.shape[0] * y.shape[2], -1))
-        return c_sem, y_sem, c, y
+        y_logit = self.emb2label(y.reshape(y.shape[0] * y.shape[2], -1))
+        y_sem = y_logit.sigmoid()
+        return c_sem, y_sem, c, y, c_logit, y_logit
 
     def training_step(self, batch, batch_no):
         loss_c, loss_y, loss, c_accuracy, y_accuracy = step(self, batch, self.loss_form)
@@ -64,21 +63,20 @@ class ToyNetEmbNorm(pl.LightningModule):
     def __init__(self, n_features, n_concepts, n_tasks, emb_size):
         super().__init__()
         self.save_hyperparameters()
-        self.x2c_model = Sequential(*[
+        self.x2c_model = Sequential(
             Linear(n_features, 10),
             LeakyReLU(),
             Linear(10, 10),
             LeakyReLU(),
             ConceptEmbeddings(in_features=10, out_features=n_concepts, emb_size=emb_size, bias=True),
-        ])
-        # self.c2y_model = NeSyLayer(5, n_concepts, n_concepts, n_tasks)
-        self.c2y_model = Sequential(*[
+        )
+        self.c2y_model = Sequential(
             Linear(n_concepts, 50),
             LeakyReLU(),
             Linear(50, 20),
             LeakyReLU(),
             Linear(20, n_tasks),
-        ])
+        )
         self.loss_form = BCELoss()
         self.train_loss = []
         self.train_accuracy = []
@@ -88,10 +86,13 @@ class ToyNetEmbNorm(pl.LightningModule):
     def forward(self, x):
         c = self.x2c_model(x)
         c_emb = embedding_to_nesyemb(c)
+        c_logit = semantics(c)
         c_sem = semantics(c_emb)
         y = self.c2y_model(c_emb.permute(0, 2, 1))
-        y_sem = semantics(embedding_to_nesyemb(y))
-        return c_sem, y_sem, c, y
+        y_logit = semantics(y)
+        y_emb = embedding_to_nesyemb(y)
+        y_sem = semantics(y_emb)
+        return c_sem, y_sem, c, y, c_logit, y_logit
 
     def training_step(self, batch, batch_no):
         loss_c, loss_y, loss, c_accuracy, y_accuracy = step(self, batch, self.loss_form)
@@ -114,21 +115,21 @@ class ToyNetFuzzyExtra(pl.LightningModule):
     def __init__(self, n_features, n_concepts, n_tasks, emb_size):
         super().__init__()
         self.save_hyperparameters()
-        self.x2c_model = Sequential(*[
+        self.x2c_model = Sequential(
             Linear(n_features, 10),
             LeakyReLU(),
             Linear(10, 10),
             LeakyReLU(),
             Linear(10, n_concepts * emb_size),
-        ])
-        self.c2y_model = Sequential(*[
+        )
+        self.c2y_model = Sequential(
             Linear(n_concepts * emb_size, 50),
             LeakyReLU(),
             Linear(50, 20),
             LeakyReLU(),
             Linear(20, n_tasks),
             Sigmoid()
-        ])
+        )
         self.loss_form = BCELoss()
         self.train_loss = []
         self.train_accuracy = []
@@ -137,11 +138,13 @@ class ToyNetFuzzyExtra(pl.LightningModule):
 
     def forward(self, x):
         c = self.x2c_model(x)
-        c_sem = torch.sigmoid(c[:, :self.hparams['n_concepts']])
+        c_logit = c[:, :self.hparams['n_concepts']]
+        c_sem = torch.sigmoid(c_logit)
         c_free = torch.nn.functional.leaky_relu(c[:, self.hparams['n_concepts']:])
         c_out = torch.hstack([c_sem, c_free])
         y = self.c2y_model(c_out)
-        return c_sem, y, c_out, y
+        y_logit = y
+        return c_sem, y, c_out, y, c_logit, y_logit
 
     def training_step(self, batch, batch_no):
         loss_c, loss_y, loss, c_accuracy, y_accuracy = step(self, batch, self.loss_form)
@@ -164,22 +167,22 @@ class ToyNetFuzzy(pl.LightningModule):
     def __init__(self, n_features, n_concepts, n_tasks):
         super().__init__()
         self.save_hyperparameters()
-        self.x2c_model = Sequential(*[
+        self.x2c_model = Sequential(
             Linear(n_features, 10),
             LeakyReLU(),
             Linear(10, 10),
             LeakyReLU(),
             Linear(10, n_concepts),
             Sigmoid()
-        ])
-        self.c2y_model = Sequential(*[
+        )
+        self.c2y_model = Sequential(
             Linear(n_concepts, 60),
             LeakyReLU(),
             Linear(60, 20),
             LeakyReLU(),
             Linear(20, n_tasks),
             Sigmoid()
-        ])
+        )
         self.loss_form = BCELoss()
         self.train_loss = []
         self.train_accuracy = []
@@ -189,7 +192,7 @@ class ToyNetFuzzy(pl.LightningModule):
     def forward(self, x):
         c = self.x2c_model(x)
         y = self.c2y_model(c)
-        return c, y, c, y
+        return c, y, c, y, c, y
 
     def training_step(self, batch, batch_no):
         loss_c, loss_y, loss, c_accuracy, y_accuracy = step(self, batch, self.loss_form)
@@ -212,22 +215,22 @@ class ToyNetBool(pl.LightningModule):
     def __init__(self, n_features, n_concepts, n_tasks):
         super().__init__()
         self.save_hyperparameters()
-        self.x2c_model = Sequential(*[
+        self.x2c_model = Sequential(
             Linear(n_features, 10),
             LeakyReLU(),
             Linear(10, 10),
             LeakyReLU(),
             Linear(10, n_concepts),
             Sigmoid()
-        ])
-        self.c2y_model = Sequential(*[
+        )
+        self.c2y_model = Sequential(
             Linear(n_concepts, 60),
             LeakyReLU(),
             Linear(60, 20),
             LeakyReLU(),
             Linear(20, n_tasks),
             Sigmoid()
-        ])
+        )
         self.loss_form = BCELoss()
         self.train_loss = []
         self.train_accuracy = []
@@ -237,7 +240,7 @@ class ToyNetBool(pl.LightningModule):
     def forward(self, x):
         c = self.x2c_model(x)
         y = self.c2y_model((c>0.5).float())
-        return c, y, c, y
+        return c, y, c, y, c, y
 
     def training_step(self, batch, batch_no):
         loss_c, loss_y, loss, c_accuracy, y_accuracy = step(self, batch, self.loss_form)
@@ -258,12 +261,13 @@ class ToyNetBool(pl.LightningModule):
 
 def step(model, batch, loss_form):
     x, c, y = batch
-    c_logits, y_logits, _, _ = model(x)
-    loss_c = loss_form(c_logits.ravel(), c.ravel())
-    loss_y = loss_form(y_logits.ravel(), y.ravel())
+    c_probs, y_probs, _, _, _, _ = model(x)
+    loss_c = loss_form(c_probs.ravel(), c.ravel())
+    loss_y = loss_form(y_probs.ravel(), y.ravel())
     loss = loss_c + 0.5 * loss_y
+    # loss = loss_y
     # compute accuracy
-    c_accuracy, y_accuracy = compute_accuracy(c_logits, y_logits, c, y)
+    c_accuracy, y_accuracy = compute_accuracy(c_probs, y_probs, c, y)
     print(f'Loss {loss:.4f}, c_acc: {c_accuracy:.4f}, y_acc: {y_accuracy:.4f}')
     return loss_c, loss_y, loss, c_accuracy, y_accuracy
 
