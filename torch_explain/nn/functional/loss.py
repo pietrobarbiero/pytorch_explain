@@ -2,6 +2,7 @@ import torch
 from torch.nn import Linear
 
 from torch_explain.nn.logic import EntropyLinear
+from torch_explain.nn.vector_logic import SoftmaxTemp
 
 
 def entropy_logic_loss(model: torch.nn.Module):
@@ -13,7 +14,7 @@ def entropy_logic_loss(model: torch.nn.Module):
     """
     loss = 0
     for module in model.children():
-        if isinstance(module, EntropyLinear):
+        if type(module).__name__ in ['EntropyLinear', 'SoftmaxTemp']:
             loss -= torch.sum(module.alpha * torch.log(module.alpha))
             break
     return loss

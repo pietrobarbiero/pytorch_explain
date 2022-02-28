@@ -24,6 +24,42 @@ class ConceptEmbeddings(Linear):
         return h.permute(0, 2, 1)
 
 
+class Flatten2Emb(Module):
+
+    def __init__(self) -> None:
+        super(Flatten2Emb, self).__init__()
+
+    def forward(self, input: Tensor) -> Tensor:
+        return input.reshape(input.shape[0], input.shape[1], -1).permute(0, 2, 1)
+
+
+class SoftmaxTemp(Module):
+    __constants__ = ['dim']
+    dim: Optional[int]
+    temperature: float
+
+    def __init__(self, dim: Optional[int] = None, temperature: float = 1) -> None:
+        super(SoftmaxTemp, self).__init__()
+        self.dim = dim
+        self.temperature = temperature
+        self.alpha = None
+        self.alpha_norm = None
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        if not hasattr(self, 'dim'):
+            self.dim = None
+
+    def forward(self, input: Tensor) -> Tensor:
+        self.alpha = torch.exp(input / self.temperature) / torch.sum(torch.exp(input / self.temperature),
+                                                                     dim=self.dim, keepdim=True)
+        self.alpha_norm = self.alpha / self.alpha.max(dim=self.dim)[0].unsqueeze(1)
+        return self.alpha
+
+    def extra_repr(self) -> str:
+        return 'dim={dim}, temperature={temperature}'.format(dim=self.dim, temperature=self.temperature)
+
+
 class NeSyLayer(Module):
     def __init__(self, embed_dim: int, in_concepts: int, h_concepts: int, n_classes: int, bias: bool = True,
                  device=None, dtype=None) -> None:
@@ -104,6 +140,28 @@ def to_boolean(embedding: Tensor, true_norm: float = 0, false_norm: float = 1) -
 
 
 if __name__ == '__main__':
+    # Self-supervised concepts
+    from torch_explain.nn.functional.loss import entropy_logic_loss
+    n_samples = 64
+    n_filters = 32
+    emb_size = 3*3
+    input = torch.randn(n_samples, 1, 5, 5)
+    x2c = torch.nn.Sequential(
+        torch.nn.Conv2d(1, n_filters, 5, 1, 1),
+        Flatten2Emb(),
+    )
+    scoring = torch.nn.Sequential(
+        Linear(emb_size, 1),
+        SoftmaxTemp(dim=1, temperature=1),
+    )
+    concept_emb = x2c(input)
+    concept_scores = scoring(concept_emb.permute(0, 2, 1)).squeeze(-1)
+    loss = entropy_logic_loss(scoring)
+    print(torch.sum(concept_scores, dim=1))
+    print(torch.sum(concept_scores, dim=1).shape)
+    print("Loss: ", loss)
+
+    # Supervised concepts
     n_samples = 100
     n_features = 50
     n_concepts = 5
