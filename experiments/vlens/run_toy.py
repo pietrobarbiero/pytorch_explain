@@ -6,7 +6,7 @@ from torch.utils.data import DataLoader, TensorDataset
 import pytorch_lightning as pl
 from pytorch_lightning import seed_everything
 
-from experiments.data.load_datasets import generate_dot, generate_trigonometry, generate_xor
+from experiments.data.load_datasets import generate_dot, generate_trigonometry, generate_xor, load_mnist_poly
 from experiments.vlens.networks_toy import compute_accuracy, ToyNetEmbNorm, ToyNetEmbPlane, ToyNetFuzzyExtra, \
     ToyNetFuzzy, ToyNetBool
 
@@ -15,24 +15,28 @@ def main():
     # shutil.rmtree('./results/', ignore_errors=True)
 
     # parameters for data, model, and training
-    batch_size = 3000
-    batch_size_test = 1000
-    emb_sizes = [2, 10, 50]
+    batch_size = 4000
+    batch_size_test = 4000
+    emb_sizes = [2] #[2, 10, 50]
     max_epochs = 3000
     check_val_every_n_epoch = 100
     gpu = 1
-    cv = 5
+    cv = 2 # 5
     models = {
         'embedding_plane': emb_sizes,
-        'embedding_norm': emb_sizes,
-        'fuzzy_extra': emb_sizes,
+        # 'embedding_norm': emb_sizes,
+        # 'fuzzy_extra': emb_sizes,
         'fuzzy': [1],
-        'bool': [1],
+        # 'bool': [1],
     }
+    x_train, c_train, y_train, x_val, c_val, y_val = load_mnist_poly()
+    mnist_poly_train = (x_train, c_train, y_train)
+    mnist_poly_test = (x_val, c_val, y_val)
     datasets = {
-        'dot': [generate_dot(batch_size), generate_dot(batch_size_test), generate_dot(batch_size_test)],
+        # 'mnist_poly': [mnist_poly_train, mnist_poly_train, mnist_poly_test],
+        # 'dot': [generate_dot(batch_size), generate_dot(batch_size_test), generate_dot(batch_size_test)],
         'trigonometry': [generate_trigonometry(batch_size), generate_trigonometry(batch_size_test), generate_trigonometry(batch_size_test)],
-        'xor': [generate_xor(batch_size), generate_xor(batch_size_test), generate_xor(batch_size_test)],
+        # 'xor': [generate_xor(batch_size), generate_xor(batch_size_test), generate_xor(batch_size_test)],
     }
 
     for dataset_name, dataset in datasets.items():

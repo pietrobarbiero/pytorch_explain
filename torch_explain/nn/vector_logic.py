@@ -4,6 +4,14 @@ import torch
 from torch.nn import Linear, Parameter, Module, MultiheadAttention, Module, init
 from torch import Tensor
 from torch.nn import functional as F
+from torchkge.models import TransEModel, ComplExModel
+from torchkge.sampling import BernoulliNegativeSampler
+from torchkge.utils import MarginLoss, DataLoader, Trainer
+from torchkge.utils.datasets import load_fb15k, load_fb13
+import torch
+import pandas as pd
+from torchkge.data_structures import KnowledgeGraph
+from torchkge.models import TransEModel
 
 
 class ConceptEmbeddings(Linear):
@@ -139,7 +147,38 @@ def to_boolean(embedding: Tensor, true_norm: float = 0, false_norm: float = 1) -
     return ct * sm.unsqueeze(-1)
 
 
+class RelationalLayer(Module):
+
+    def __init__(self, kge, sampler) -> None:
+        super(RelationalLayer, self).__init__()
+        self.kge = kge
+        self.sampler = sampler
+
+    def forward(self, head, tail, relation) -> [Tensor, Tensor]:
+        neg_head, neg_tail = self.sampler.corrupt_batch(head, tail, relation)
+        pos, neg = model(head, tail, neg_head, neg_tail, relation)
+        return pos, neg
+
+
 if __name__ == '__main__':
+    # KGE stuff
+    n_samples = 100
+    n_concepts = 8
+    emb_size = 9
+    concept_emb = torch.randn((n_samples, emb_size, n_concepts))
+    df = pd.DataFrame([['smokes(A)', 'cancer(A)', 0],
+                       ['smokes(A)', 'friends(A,A)', 0],
+                       ['smokes(A)', 'friends(A,B)', 0],
+                       ['smokes(A)', 'friends(B,A)', 0],
+                       ['smokes(A)', 'smokes(B)', 0],
+                       ['smokes(B)', 'friends(B,B)', 0],
+                       ['smokes(B)', 'cancer(B)', 0]], columns=['from', 'to', 'rel'])
+    kg = KnowledgeGraph(df)
+    # Define some hyper-parameters for training
+    model = TransEModel(emb_size, kg.n_ent, kg.n_rel, dissimilarity_type='L2')
+    emb = model.get_embeddings() # (nodes x emb_size), (rel, x emb_size)
+    new_concept_emb = concept_emb + emb[0].T.unsqueeze(0)
+
     # Self-supervised concepts
     from torch_explain.nn.functional.loss import entropy_logic_loss
     n_samples = 64
@@ -188,3 +227,52 @@ if __name__ == '__main__':
     y_emb = model2(x)
     print(y_emb.shape)
     print(semantics(y_emb))
+
+
+
+
+    # import torch
+    # import pandas as pd
+    # from torch import cuda
+    # from torchkge.data_structures import KnowledgeGraph
+    # from torchkge.evaluation import LinkPredictionEvaluator, TripletClassificationEvaluator
+    # from torchkge.models import TransEModel
+    # from torchkge.sampling import BernoulliNegativeSampler
+    # from torchkge.utils import MarginLoss, DataLoader, Trainer, TrainDataLoader
+    # df = pd.DataFrame([[0, 1, 0], [0, 2, 0], [0, 3, 0], [0, 4, 0], [1, 2, 1], [1, 3, 2], [2, 4, 0], [3, 4, 4],
+    #                    [5, 4, 0]], columns=['from', 'to', 'rel'])
+    # kg = KnowledgeGraph(df)
+    # # Define some hyper-parameters for training
+    # emb_dim = 10
+    # lr = 0.0004
+    # n_epochs = 10000
+    # margin = 0.5
+    # # Define the model and criterion
+    # model = TransEModel(emb_dim, kg.n_ent, kg.n_rel, dissimilarity_type='L2')
+    # criterion = MarginLoss(margin)
+    #
+    # # Move everything to CUDA if available
+    # if cuda.is_available():
+    #     model.cuda()
+    #     criterion.cuda()
+    #
+    # # Define the torch optimizer to be used
+    # optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=1e-5)
+    # sampler = BernoulliNegativeSampler(kg)
+    # dataloader = TrainLoader(kg, batch_size=1000, use_cuda='all')
+    #
+    # for epoch in range(n_epochs):
+    #     running_loss = 0.0
+    #     current_batch = next(iter(dataloader))
+    #     h, t, r = current_batch['h'], current_batch['t'], current_batch['r']
+    #     nh, nt = current_batch['nh'], current_batch['nt']
+    #
+    #     optimizer.zero_grad()
+    #
+    #     # forward + backward + optimize
+    #     pos, neg = model(h, t, r, nh, nt)
+    #     loss = criterion(pos, neg)
+    #     loss.backward()
+    #     optimizer.step()
+    #
+    #     print(f'Epoch {epoch}: loss={loss}')
