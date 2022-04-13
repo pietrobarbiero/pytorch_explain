@@ -4,8 +4,37 @@ import sympy
 
 import torch
 import numpy as np
-from sklearn.metrics import f1_score
+from scipy.spatial.distance import cdist
+from sklearn.metrics import f1_score, accuracy_score
+from sklearn_extra.cluster import KMedoids
 from sympy import to_dnf, lambdify
+
+
+def auc_truth_table_score(c_vec: np.array, y_pred: np.array, y_test: np.array,
+                          step: int = 100) -> [int, np.array, np.array]:
+    """
+    Computes the AUC of the truth table from concepts to tasks.
+
+    :param c_vec: predicted concept representations (can be concept embeddings)
+    :param y_pred: task predictions
+    :param y_test: task ground truth labels
+    :param step: integration step
+    :return: AUC score, cluster sizes and corresponding accuracies
+    """
+    n_clusters = np.arange(2, len(c_vec), step)
+    accuracy_list = []
+    for nc in n_clusters:
+        kmedoids = KMedoids(n_clusters=nc, random_state=0)
+        c_cluster_labels = kmedoids.fit_predict(c_vec)
+        y_center_labels = y_pred[kmedoids.medoid_indices_] > 0.5
+        min_dist = cdist(c_vec, kmedoids.cluster_centers_).argmin(axis=1)
+        y_cluster_labels = np.array([y_center_labels[md] for md in min_dist])
+        accuracy_list.append(accuracy_score(y_test, y_cluster_labels))
+
+    accuracies = np.array(accuracy_list)
+    max_auc = np.trapz(np.ones(len(n_clusters)))
+    auc_score = np.trapz(accuracies) / max_auc
+    return auc_score, n_clusters, np.array(accuracy_list)
 
 
 def test_explanation(formula: str, x: torch.Tensor, y: torch.Tensor, target_class: int):
