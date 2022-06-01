@@ -1,7 +1,6 @@
 import unittest
 
 import torch
-from pytorch_lightning import seed_everything
 from sklearn.datasets import make_classification
 from sklearn.model_selection import StratifiedShuffleSplit
 from torch.nn.functional import one_hot
@@ -21,7 +20,6 @@ from torch_explain.nn.functional import prune_equal_fanin
 class TestTemplateObject(unittest.TestCase):
     def test_psi_explain_class_binary(self):
         for i in range(1):
-            seed_everything(i)
 
             # Problem 1
             x = torch.tensor([
