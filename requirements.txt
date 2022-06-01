@@ -5,6 +5,7 @@ pandas
 torch
 sympy
 pytorch_lightning
+networkx
 torch-scatter
 torch-sparse
 torch-cluster
