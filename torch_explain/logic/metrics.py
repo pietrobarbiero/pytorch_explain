@@ -8,7 +8,8 @@ from sklearn.metrics import f1_score
 from sympy import to_dnf, lambdify
 
 
-def test_explanation(formula: str, x: torch.Tensor, y: torch.Tensor, target_class: int):
+def test_explanation(formula: str, x: torch.Tensor, y: torch.Tensor, target_class: int,
+                     mask: torch.Tensor = None, threshold: float = 0.5):
     """
     Tests a logic formula.
 
@@ -16,6 +17,8 @@ def test_explanation(formula: str, x: torch.Tensor, y: torch.Tensor, target_clas
     :param x: input data
     :param y: input labels (MUST be one-hot encoded)
     :param target_class: target class
+    :param mask: sample mask
+    :param threshold: threshold to get concept truth values
     :return: Accuracy of the explanation and predictions
     """
 
@@ -30,9 +33,9 @@ def test_explanation(formula: str, x: torch.Tensor, y: torch.Tensor, target_clas
         explanation = to_dnf(formula)
         fun = lambdify(concept_list, explanation, 'numpy')
         x = x.cpu().detach().numpy()
-        predictions = fun(*[x[:, i] > 0.5 for i in range(x.shape[1])])
+        predictions = fun(*[x[:, i] > threshold for i in range(x.shape[1])])
         # get accuracy
-        accuracy = f1_score(y, predictions, average='macro')
+        accuracy = f1_score(y[mask], predictions[mask], average='macro')
         return accuracy, predictions
 
 

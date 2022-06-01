@@ -1,11 +1,12 @@
 import copy
-from typing import List, Tuple
+from typing import List, Tuple, Dict
 
 import torch
 import numpy as np
 from sympy import simplify_logic
+from torch.nn.functional import one_hot
 
-from torch_explain.logic.metrics import test_explanation
+from torch_explain.logic.metrics import test_explanation, complexity
 from torch_explain.logic.utils import replace_names
 from torch_explain.logic.utils import get_predictions
 from torch_explain.logic.utils import get_the_good_and_bad_terms
@@ -13,44 +14,83 @@ from torch_explain.nn import Conceptizator
 from torch_explain.nn.logic import EntropyLinear
 
 
-def explain_class(
-    model: torch.nn.Module,
-    x,
-    y1h,
-    x_val: torch.Tensor,
-    y_val1h: torch.Tensor,
-    target_class: int,
-    max_minterm_complexity: int = None,
-    topk_explanations: int = 3,
-    max_accuracy: bool = False,
-    concept_names: List = None,
-    try_all: bool = True,
-) -> Tuple[str, str]:
+def explain_classes(model: torch.nn.Module, c: torch.Tensor, y: torch.Tensor,
+                    train_mask: torch.Tensor, test_mask: torch.Tensor, val_mask: torch.Tensor = None,
+                    edge_index: torch.Tensor = None, max_minterm_complexity: int = 1000,
+                    topk_explanations: int = 1000, try_all: bool = False,
+                    c_threshold: float = 0.5, y_threshold: float = 0.) -> Dict:
+    """
+    Explain LENs predictions with concept-based logic explanations.
+
+    :param model: pytorch model
+    :param c: input concepts
+    :param y: target labels
+    :param train_mask: train mask
+    :param test_mask: test mask
+    :param val_mask: validation mask
+    :param edge_index: edge index for graph data used in graph-based models
+    :param max_minterm_complexity: maximum number of concepts per logic formula (per sample)
+    :param topk_explanations: number of local explanations to be combined
+    :param try_all: if True, then tries all possible conjunctions of the top k explanations
+    :param c_threshold: threshold to get truth values for concept predictions (i.e. pred<threshold = false, pred>threshold = true)
+    :param y_threshold: threshold to get truth values for class predictions (i.e. pred<threshold = false, pred>threshold = true)
+    :return: Global explanations
+    """
+    if len(y.shape) == 1:
+        y = one_hot(y)
+
+    if val_mask is None:
+        val_mask = train_mask
+
+    explanations = {}
+    for class_id in range(y.shape[1]):
+        explanation, _ = explain_class(model, c, y, train_mask, val_mask, target_class=class_id,
+                                       edge_index=edge_index, max_minterm_complexity=max_minterm_complexity,
+                                       topk_explanations=topk_explanations, try_all=try_all,
+                                       c_threshold=c_threshold, y_threshold=y_threshold)
+
+        explanation_accuracy, _ = test_explanation(explanation, c, y, class_id, test_mask, c_threshold)
+        explanation_complexity = complexity(explanation)
+
+        explanations[str(class_id)] = {'explanation': explanation,
+                                       'explanation_accuracy': explanation_accuracy,
+                                       'explanation_complexity': explanation_complexity}
+
+        print(
+            f'Explanation class {class_id}: {explanation} - acc. = {explanation_accuracy:.4f} - compl. = {explanation_complexity:.4f}')
+
+    return explanations
+
+
+def explain_class(model: torch.nn.Module, c: torch.Tensor, y: torch.Tensor,
+                  train_mask: torch.Tensor, val_mask: torch.Tensor, target_class: int, edge_index: torch.Tensor = None,
+                  max_minterm_complexity: int = None, topk_explanations: int = 3, max_accuracy: bool = False,
+                  concept_names: List = None, try_all: bool = True, c_threshold: float = 0.5,
+                  y_threshold: float = 0.) -> Tuple[str, str]:
     """
     Generate a local explanation for a single sample.
     :param model: pytorch model
-    :param x: input samples to extract logic formulas.
-    :param y1h: target labels to extract logic formulas (MUST be one-hot encoded).
-    :param x_val: input samples to validate logic formulas.
-    :param y_val1h: target labels to validate logic formulas (MUST be one-hot encoded).
-    :param target_class: target class.
-    :param max_minterm_complexity: maximum number of concepts per logic formula (per sample).
-    :param topk_explanations: number of local explanations to be combined.
-    :param max_accuracy: if True a formula is simplified only if the simplified formula gets 100% accuracy.
-    :param concept_names: list containing the names of the input concepts.
-    :param try_all: if True, then tries all possible conjunctions of the top k explanations.
+    :param c: input concepts
+    :param y: target labels (MUST be one-hot encoded)
+    :param train_mask: train mask
+    :param val_mask: validation mask
+    :param target_class: target class
+    :param edge_index: edge index for graph data used in graph-based models
+    :param max_minterm_complexity: maximum number of concepts per logic formula (per sample)
+    :param topk_explanations: number of local explanations to be combined
+    :param max_accuracy: if True a formula is simplified only if the simplified formula gets 100% accuracy
+    :param concept_names: list containing the names of the input concepts
+    :param try_all: if True, then tries all possible conjunctions of the top k explanations
+    :param c_threshold: threshold to get truth values for concept predictions (i.e. pred<threshold = false, pred>threshold = true)
+    :param y_threshold: threshold to get truth values for class predictions (i.e. pred<threshold = false, pred>threshold = true)
     :return: Global explanation
     """
-    x_correct, y_correct1h = _get_correct_data(x, y1h, model, target_class)
-    if x_correct is None:
-        return None, None
+    c_correct, y_correct, correct_mask, active_mask = _get_correct_data(c, y, train_mask, model, target_class,
+                                                                        edge_index, y_threshold)
+    if c_correct is None:
+        return '', ''
 
-    activation = "identity_bool"
-    feature_names = [f"feature{j:010}" for j in range(x_correct.size(1))]
-    conceptizator = Conceptizator(activation)
-    y_correct = conceptizator(y_correct1h[:, target_class])
-    y_val = conceptizator(y_val1h[:, target_class])
-
+    feature_names = [f"feature{j:010}" for j in range(c_correct.size(1))]
     class_explanation = ""
     class_explanation_raw = ""
     for layer_id, module in enumerate(model.children()):
@@ -62,36 +102,41 @@ def explain_class(
             idx_and_exp = []
 
             # look at the "positive" rows of the truth table only
-            positive_samples = torch.nonzero(y_correct)
+            positive_samples = torch.nonzero(y_correct[:, target_class]).numpy().ravel()
             for positive_sample in positive_samples:
                 local_explanation, local_explanation_raw = _local_explanation(
                     module,
                     feature_names,
                     positive_sample,
                     local_explanations_raw,
-                    x_correct,
-                    y_correct1h,
+                    c_correct,
+                    y_correct,
                     target_class,
                     max_accuracy,
                     max_minterm_complexity,
+                    c_threshold=c_threshold,
+                    y_threshold=y_threshold,
                     simplify=False,
                 )
 
-                idx_and_exp.append((positive_sample, local_explanation_raw))
-
-                if local_explanation and local_explanation_raw:
+                if local_explanation and local_explanation_raw and local_explanation_raw not in local_explanations_raw:
+                    idx_and_exp.append((positive_sample, local_explanation_raw))
                     local_explanations_raw[
                         local_explanation_raw
                     ] = local_explanation_raw
                     local_explanations.append(local_explanation)
 
             for positive_sample, local_explanation_raw in idx_and_exp:
+                sample_pos = train_mask[positive_sample]
                 good, bad = get_the_good_and_bad_terms(
                     model=model,
-                    input_tensor=x_correct[positive_sample],
+                    c=c,
+                    edge_index=edge_index,
+                    sample_pos=sample_pos,
                     explanation=local_explanation_raw,
-                    target=target_class,
+                    target_class=target_class,
                     concept_names=feature_names,
+                    threshold=c_threshold
                 )
 
                 local_explanation_raw = " & ".join(good)
@@ -99,7 +144,7 @@ def explain_class(
                 # test explanation accuracy
                 if local_explanation_raw not in local_explanations_accuracies:
                     accuracy, _ = test_explanation(
-                        local_explanation_raw, x_val, y_val1h, target_class
+                        local_explanation_raw, c, y, target_class, val_mask, c_threshold
                     )
                     local_explanations_accuracies[local_explanation_raw] = accuracy
 
@@ -109,18 +154,22 @@ def explain_class(
                     local_explanations_accuracies,
                     topk_explanations,
                     target_class,
-                    x_val,
-                    y_val1h,
+                    c,
+                    y,
                     max_accuracy,
+                    val_mask,
+                    c_threshold
                 )
             else:
                 aggregated_explanation, best_acc = _aggregate_explanations(
                     local_explanations_accuracies,
                     topk_explanations,
                     target_class,
-                    x_val,
-                    y_val1h,
+                    c,
+                    y,
                     max_accuracy,
+                    val_mask,
+                    c_threshold
                 )
             class_explanation_raw = str(aggregated_explanation)
             class_explanation = class_explanation_raw
@@ -133,11 +182,14 @@ def explain_class(
 
 
 def _simplify_formula(
-    explanation: str,
-    x: torch.Tensor,
-    y: torch.Tensor,
-    target_class: int,
-    max_accuracy: bool,
+        explanation: str,
+        x: torch.Tensor,
+        y: torch.Tensor,
+        target_class: int,
+        max_accuracy: bool,
+        mask: torch.Tensor = None,
+        c_threshold: float = 0.5,
+        y_threshold: float = 0.
 ) -> str:
     """
     Simplify formula to a simpler one that is still coherent.
@@ -146,10 +198,12 @@ def _simplify_formula(
     :param y: target labels (1D, categorical NOT one-hot encoded).
     :param target_class: target class
     :param max_accuracy: drop  term only if it gets max accuracy
+    :param c_threshold: threshold to get truth values for concept predictions (i.e. pred<threshold = false, pred>threshold = true)
+    :param y_threshold: threshold to get truth values for class predictions (i.e. pred<threshold = false, pred>threshold = true)
     :return: Simplified formula
     """
 
-    base_accuracy, _ = test_explanation(explanation, x, y, target_class)
+    base_accuracy, _ = test_explanation(explanation, x, y, target_class, mask, c_threshold)
     for term in explanation.split(" & "):
         explanation_simplified = copy.deepcopy(explanation)
 
@@ -160,10 +214,10 @@ def _simplify_formula(
 
         if explanation_simplified:
             accuracy, preds = test_explanation(
-                explanation_simplified, x, y, target_class
+                explanation_simplified, x, y, target_class, mask, c_threshold
             )
             if (max_accuracy and accuracy == 1.0) or (
-                not max_accuracy and accuracy >= base_accuracy
+                    not max_accuracy and accuracy >= base_accuracy
             ):
                 explanation = copy.deepcopy(explanation_simplified)
                 base_accuracy = accuracy
@@ -172,7 +226,7 @@ def _simplify_formula(
 
 
 def _aggregate_explanations(
-    local_explanations_accuracy, topk_explanations, target_class, x, y, max_accuracy
+        local_explanations_accuracy, topk_explanations, target_class, x, y, max_accuracy, val_mask, threshold
 ):
     """
     Sort explanations by accuracy and then aggregate explanations which increase the accuracy of the aggregated formula.
@@ -196,7 +250,7 @@ def _aggregate_explanations(
         best_accuracy = 0
         best_explanation = ""
         for explanation_raw, accuracy in local_explanations_sorted:
-            explanation = _simplify_formula(explanation_raw, x, y, target_class, max_accuracy=max_accuracy)
+            explanation = _simplify_formula(explanation_raw, x, y, target_class, max_accuracy, val_mask, threshold)
             if not explanation:
                 continue
 
@@ -218,7 +272,7 @@ def _aggregate_explanations(
             ]:
                 continue
             accuracy, _ = test_explanation(
-                aggregated_explanation_simplified, x, y, target_class
+                aggregated_explanation_simplified, x, y, target_class, val_mask, threshold
             )
             if accuracy > best_accuracy:
                 best_accuracy = accuracy
@@ -229,7 +283,7 @@ def _aggregate_explanations(
 
 
 def _aggregate_explanations_try_all(
-    local_explanations_accuracy, topk_explanations, target_class, x, y, max_accuracy
+        local_explanations_accuracy, topk_explanations, target_class, x, y, max_accuracy, val_mask, c_threshold
 ):
     """
     Sort explanations by accuracy and then aggregate explanations which increase the accuracy of the aggregated formula.
@@ -256,11 +310,11 @@ def _aggregate_explanations_try_all(
         best_explanation = ""
 
         for explanation_raw, accuracy in local_explanations_sorted:
-            explanation = _simplify_formula(explanation_raw, x, y, target_class, max_accuracy=max_accuracy)
+            explanation = _simplify_formula(explanation_raw, x, y, target_class, max_accuracy, val_mask, c_threshold)
             if not explanation:
                 continue
 
-            predictions.append(get_predictions(explanation, x, target_class))
+            predictions.append(get_predictions(explanation, x, target_class, c_threshold))
             explanations.append(explanation)
 
         predictions = np.array(predictions)
@@ -303,23 +357,25 @@ def _aggregate_explanations_try_all(
 
 
 def _local_explanation(
-    module,
-    feature_names,
-    neuron_id,
-    neuron_explanations_raw,
-    c_validation,
-    y_target,
-    target_class,
-    max_accuracy,
-    max_minterm_complexity,
-    simplify=True,
+        module,
+        feature_names,
+        neuron_id,
+        neuron_explanations_raw,
+        c_validation,
+        y_target,
+        target_class,
+        max_accuracy,
+        max_minterm_complexity,
+        c_threshold=0.5,
+        y_threshold=0.,
+        simplify=True,
 ):
     # explanation is the conjunction of non-pruned features
     explanation_raw = ""
     if max_minterm_complexity:
         concepts_to_retain = torch.argsort(module.alpha[target_class], descending=True)[
-            :max_minterm_complexity
-        ]
+                             :max_minterm_complexity
+                             ]
     else:
         non_pruned_concepts = module.concept_mask[target_class]
         concepts_sorted = torch.argsort(module.alpha[target_class])
@@ -329,10 +385,7 @@ def _local_explanation(
         if feature_names[j] not in ["()", ""]:
             if explanation_raw:
                 explanation_raw += " & "
-            if (
-                module.conceptizator.concepts[0][neuron_id, j]
-                > module.conceptizator.threshold
-            ):
+            if c_validation[neuron_id, j] > c_threshold:
                 # if non_pruned_neurons[j] > 0:
                 explanation_raw += feature_names[j]
             else:
@@ -346,7 +399,7 @@ def _local_explanation(
         explanation = neuron_explanations_raw[explanation_raw]
     elif simplify:
         explanation = _simplify_formula(
-            explanation_raw, c_validation, y_target, target_class, max_accuracy
+            explanation_raw, c_validation, y_target, target_class, max_accuracy, c_threshold, y_threshold
         )
     else:
         explanation = explanation_raw
@@ -357,40 +410,28 @@ def _local_explanation(
     return explanation, explanation_raw
 
 
-def _get_correct_data(x, y, model, target_class):
-    x_target = x[y[:, target_class] == 1]
-    y_target = y[y[:, target_class] == 1]
+def _get_correct_data(c, y, train_mask, model, target_class, edge_index, threshold=0.):
+    active_mask = y[train_mask, target_class] == 1
 
     # get model's predictions
-    preds = model(x_target).squeeze(-1)
+    if edge_index is None:
+        preds = model(c).squeeze(-1)
+    else:
+        preds = model(c, edge_index).squeeze(-1)
 
     # identify samples correctly classified of the target class
-    correct_mask = y_target[:, target_class].eq(preds[:, target_class] > 0.5)
-    if sum(correct_mask) < 2:
-        return None, None
+    correct_mask = y[train_mask, target_class].eq(preds[train_mask, target_class] > threshold)
+    if (sum(correct_mask & ~active_mask) < 2) or (sum(correct_mask & active_mask) < 2):
+        return None, None, None, None
 
-    x_target_correct = x_target[correct_mask]
-    y_target_correct = y_target[correct_mask]
+    # select correct samples from both classes
+    c_target_correct = c[train_mask][correct_mask & active_mask]
+    y_target_correct = y[train_mask][correct_mask & active_mask]
+    c_opposite_correct = c[train_mask][correct_mask & ~active_mask]
+    y_opposite_correct = y[train_mask][correct_mask & ~active_mask]
 
-    # collapse samples having the same boolean values and class label different from the target class
-    x_reduced_opposite = x[y[:, target_class] != 1]
-    y_reduced_opposite = y[y[:, target_class] != 1]
-    preds_opposite = model(x_reduced_opposite).squeeze(-1)
+    # merge correct samples in the same dataset
+    c_validation = torch.cat([c_opposite_correct, c_target_correct], dim=0)
+    y_validation = torch.cat([y_opposite_correct, y_target_correct], dim=0)
 
-    # identify samples correctly classified of the opposite class
-    correct_mask = y_reduced_opposite[:, target_class].eq(
-        preds_opposite[:, target_class] > 0.5
-    )
-    if sum(correct_mask) < 2:
-        return None, None
-
-    x_reduced_opposite_correct = x_reduced_opposite[correct_mask]
-    y_reduced_opposite_correct = y_reduced_opposite[correct_mask]
-
-    # select the subset of samples belonging to the target class
-    x_validation = torch.cat([x_reduced_opposite_correct, x_target_correct], dim=0)
-    y_validation = torch.cat([y_reduced_opposite_correct, y_target_correct], dim=0)
-
-    model.eval()
-    model(x_validation)
-    return x_validation, y_validation
+    return c_validation, y_validation, correct_mask, active_mask

@@ -1,6 +1,8 @@
+import copy
 from typing import List
 import torch
 from sympy import lambdify, sympify
+import copy
 
 
 
@@ -22,7 +24,7 @@ def replace_names(explanation: str, concept_names: List[str]) -> str:
     return explanation
 
 
-def get_predictions(formula: str, x: torch.Tensor, target_class: int):
+def get_predictions(formula: str, x: torch.Tensor, target_class: int, threshold: float = 0.5):
     """
     Tests a logic formula.
     :param formula: logic formula
@@ -41,29 +43,34 @@ def get_predictions(formula: str, x: torch.Tensor, target_class: int):
         explanation = sympify(formula)
         fun = lambdify(concept_list, explanation, 'numpy')
         x = x.cpu().detach().numpy()
-        predictions = fun(*[x[:, i] > 0 for i in range(x.shape[1])])
+        predictions = fun(*[x[:, i] > threshold for i in range(x.shape[1])])
         return predictions
 
 def get_the_good_and_bad_terms(
-    model, input_tensor, explanation, target, concept_names=None
+    model, c, edge_index, sample_pos, explanation, target_class, concept_names=None, threshold=0.5
 ):
     def perturb_inputs_rem(inputs, target):
-        inputs[:, target] = 0.0
+        if threshold == 0.5:
+            inputs[:, target] = 0.0
+        elif threshold == 0.:
+            inputs[:, target] = -1.0
         return inputs
 
     def perturb_inputs_add(inputs, target):
         # inputs[:, target] += inputs.sum(axis=1) / (inputs != 0).sum(axis=1)
-        inputs[:, target] += inputs.max(axis=1)[0]
+        # inputs[:, target] += inputs.max(axis=1)[0]
+        inputs[:, target] = 1
         # inputs[:, target] += 1
         return inputs
 
-    input_tensor = input_tensor.view(1, -1)
     explanation = explanation.split(" & ")
 
     good, bad = [], []
 
-    base = model(input_tensor).view(-1)
-    base = base[target]
+    if edge_index is None:
+        base = model(c)[sample_pos].view(1, -1)
+    else:
+        base = model(c, edge_index)[sample_pos].view(1, -1)
 
     for term in explanation:
         atom = term
@@ -76,15 +83,20 @@ def get_the_good_and_bad_terms(
             idx = concept_names.index(atom)
         else:
             idx = int(atom[len("feature") :])
-        temp_tensor = input_tensor.clone().detach()
+        temp_tensor = c[sample_pos].clone().detach().view(1, -1)
         temp_tensor = (
             perturb_inputs_rem(temp_tensor, idx)
             if remove
             else perturb_inputs_add(temp_tensor, idx)
         )
-        new_pred = model(temp_tensor).view(-1)
-        new_pred = new_pred[target]
-        if new_pred >= base:
+        c2 = copy.deepcopy(c)
+        c2[sample_pos] = temp_tensor
+        if edge_index is None:
+            new_pred = model(c2)[sample_pos].view(1, -1)
+        else:
+            new_pred = model(c2, edge_index)[sample_pos].view(1, -1)
+
+        if new_pred[:, target_class] >= base[:, target_class]:
             bad.append(term)
         else:
             good.append(term)
