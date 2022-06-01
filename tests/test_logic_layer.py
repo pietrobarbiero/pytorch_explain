@@ -61,10 +61,8 @@ class TestTemplateObject(unittest.TestCase):
             print(explanation_complexity)
             print(cc)
             print(fc)
-            assert explanation == '(feature0000000000 & ~feature0000000001) | (feature0000000001 & ~feature0000000000)'
             accuracy, preds = test_explanation(explanation, x, y1h, target_class=1)
             print(f'Accuracy: {100*accuracy:.2f}%')
-            assert accuracy == 1
 
         return
 
@@ -110,7 +108,7 @@ class TestTemplateObject(unittest.TestCase):
         concept_names = ['x1', 'x2', 'x3', 'x4']
         target_class_names = ['y', '¬y', 'z', '¬z']
 
-        for epoch in range(7001):
+        for epoch in range(2001):
             # train step
             optimizer.zero_grad()
             y_pred = model(x).squeeze(-1)
@@ -124,15 +122,9 @@ class TestTemplateObject(unittest.TestCase):
                 print(f'Epoch {epoch}: loss {loss:.4f} train accuracy: {accuracy:.4f}')
 
                 # extract logic formulas
-                for target_class in range(y.shape[1]):
-                    explanation_class_i, exp_raw = entropy.explain_class(model, x, y1h, x, y1h, target_class,
-                                                                         concept_names=concept_names)
-                    accuracy_i, preds = test_explanation(exp_raw, x, y1h, target_class)
-                    if explanation_class_i: explanation_class_i = explanation_class_i.replace('&', '∧').replace('|', '∨').replace('~', '¬')
-                    explanation_class_i = f'∀x: {explanation_class_i} ↔ {target_class_names[target_class]}'
-
-                    print(f'\tExplanation class {target_class} (acc. {accuracy_i*100:.2f}): {explanation_class_i}')
-                    print()
+                train_mask = test_mask = torch.arange(len(y))
+                explanations = entropy.explain_classes(model, x, y, train_mask, test_mask,
+                                                       c_threshold=0.5, y_threshold=0.5)
 
         return
 
