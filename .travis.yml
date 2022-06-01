@@ -23,6 +23,7 @@ install:
   - conda create -n testenv --yes python=$PYTHON_VERSION pip
   - source activate testenv
   - conda install --yes pytorch torchvision torchaudio cpuonly -c pytorch
+  - pip install torch-scatter torch-sparse torch-cluster torch-spline-conv torch-geometric -f https://data.pyg.org/whl/torch-1.11.0+cpu.html
   - pip install sympy pandas scikit-learn tqdm cython nose seaborn matplotlib pytest pytest-cov codecov
   - pip install pytorch-lightning
   - pip install .

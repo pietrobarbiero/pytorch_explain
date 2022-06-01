@@ -5,3 +5,8 @@ pandas
 torch
 sympy
 pytorch_lightning
+torch-scatter
+torch-sparse
+torch-cluster
+torch-spline-conv
+torch-geometric
