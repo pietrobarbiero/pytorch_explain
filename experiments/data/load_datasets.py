@@ -11,6 +11,8 @@ from sklearn.tree import DecisionTreeClassifier
 from torch.nn.functional import one_hot
 from torch.utils.data import TensorDataset
 
+from experiments.data.tabula_muris_comet.datamgr import SimpleDataManager
+
 
 def load_mimic(base_dir: str = './data/'):
     data = pd.read_csv(f'{base_dir}/mimic-ii/full_cohort_data.csv')
@@ -273,6 +275,12 @@ def load_cub(base_dir='./data'):
             return train_data, val_data, test_data, concept_names
 
 
+def load_tabula_muris(base_dir='./data', batch_size=30, mode='train'):
+    dm = SimpleDataManager(batch_size=batch_size)
+    return dm.get_data_loader(os.path.join(base_dir, 'tabula_muris_comet'), mode=mode)
+
+
 if __name__ == '__main__':
-    x, y, c = load_vDem('.')
+    dm = SimpleDataManager(batch_size=30)
+    dl = dm.get_data_loader('./tabula_muris_comet')
     # x, y, c = load_celldiff('.')
