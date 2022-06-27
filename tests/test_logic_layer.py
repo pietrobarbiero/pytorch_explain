@@ -79,9 +79,16 @@ class TestTemplateObject(unittest.TestCase):
             [0, 0, 0, 0],
             [0, 1, 0, 0],
             [1, 0, 0, 0],
+            [1, 0, 0, 0],
+            [1, 0, 0, 0],
             [1, 1, 0, 0],
             [0, 0, 0, 0],
             [0, 0, 0, 1],
+            [1, 1, 0, 0],
+            [0, 0, 0, 0],
+            [0, 1, 0, 1],
+            [0, 0, 0, 0],
+            [0, 1, 0, 1],
             [0, 0, 1, 0],
             [0, 0, 1, 1],
         ], dtype=torch.float)
@@ -90,7 +97,14 @@ class TestTemplateObject(unittest.TestCase):
             [0, 1, 0, 1],
             [1, 0, 0, 1],
             [1, 0, 0, 1],
+            [1, 0, 0, 1],
+            [1, 0, 0, 1],
             [0, 1, 0, 1],
+            [0, 1, 0, 1],
+            [0, 1, 1, 0],
+            [0, 1, 0, 1],
+            [0, 1, 0, 1],
+            [0, 1, 1, 0],
             [0, 1, 0, 1],
             [0, 1, 1, 0],
             [0, 1, 1, 0],
@@ -113,24 +127,28 @@ class TestTemplateObject(unittest.TestCase):
 
         concept_names = ['x1', 'x2', 'x3', 'x4']
         target_class_names = ['y', '¬y', 'z', '¬z']
-
+        train_mask = torch.tensor([1, 1, 1, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 1, 1], dtype=torch.bool)
+        test_mask = ~train_mask
+        train_mask = torch.where(train_mask)[0]
+        test_mask = torch.where(test_mask)[0]
         for epoch in range(2001):
             # train step
             optimizer.zero_grad()
             y_pred = model(x).squeeze(-1)
-            loss = loss_form(y_pred, y) + 0.0001 * te.nn.functional.entropy_logic_loss(model)
+            loss = loss_form(y_pred[train_mask], y[train_mask]) + 0.0001 * te.nn.functional.entropy_logic_loss(model)
             loss.backward()
             optimizer.step()
 
             # compute accuracy
             if epoch % 100 == 0:
-                accuracy = (y_pred>0.5).eq(y).sum().item() / (y.size(0) * y.size(1))
-                print(f'Epoch {epoch}: loss {loss:.4f} train accuracy: {accuracy:.4f}')
+                train_accuracy = (y_pred[train_mask]>0.5).eq(y[train_mask]).sum().item() / (y.size(0) * y.size(1))
+                test_accuracy = (y_pred[test_mask]>0.5).eq(y[test_mask]).sum().item() / (y.size(0) * y.size(1))
+                print(f'Epoch {epoch}: loss {loss:.4f} train accuracy: {train_accuracy:.4f} test accuracy: {test_accuracy:.4f}')
 
                 # extract logic formulas
-                train_mask = test_mask = torch.arange(len(y))
+                # train_mask = test_mask = torch.arange(len(y))
                 explanations = entropy.explain_classes(model, x, y, train_mask, test_mask,
-                                                       c_threshold=0.5, y_threshold=0.5)
+                                                       c_threshold=0.5, y_threshold=0.5, verbose=True)
 
         return
 
@@ -194,7 +212,8 @@ class TestTemplateObject(unittest.TestCase):
 
         # extract logic formulas
         explanations = entropy.explain_classes(model, x, y, train_mask, test_mask,
-                                               edge_index=edge_index, c_threshold=0, topk_explanations=3)
+                                               edge_index=edge_index, c_threshold=0,
+                                               topk_explanations=3, verbose=True)
 
         return
 
