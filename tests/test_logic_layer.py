@@ -126,7 +126,7 @@ class TestTemplateObject(unittest.TestCase):
         model.train()
 
         concept_names = ['x1', 'x2', 'x3', 'x4']
-        target_class_names = ['y', '¬y', 'z', '¬z']
+        class_names = ['y', '¬y', 'z', '¬z']
         train_mask = torch.tensor([1, 1, 1, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 1, 1], dtype=torch.bool)
         test_mask = ~train_mask
         train_mask = torch.where(train_mask)[0]
@@ -148,7 +148,8 @@ class TestTemplateObject(unittest.TestCase):
                 # extract logic formulas
                 # train_mask = test_mask = torch.arange(len(y))
                 explanations = entropy.explain_classes(model, x, y, train_mask, test_mask,
-                                                       c_threshold=0.5, y_threshold=0.5, verbose=True)
+                                                       c_threshold=0.5, y_threshold=0.5, verbose=True,
+                                                       concept_names=concept_names, class_names=class_names)
 
         return
 

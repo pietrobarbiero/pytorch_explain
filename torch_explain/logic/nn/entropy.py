@@ -61,17 +61,16 @@ def explain_classes(model: torch.nn.Module, c: torch.Tensor, y: torch.Tensor,
                                        'explanation_accuracy': explanation_accuracy,
                                        'explanation_complexity': explanation_complexity}
 
+        if concept_names is not None and class_names is not None:
+            explanations[str(class_id)]['explanation'] = replace_names(explanations[str(class_id)]['explanation'],
+                                                                 concept_names)
+            explanations[str(class_id)]['name'] = class_names[class_id]
+
         if verbose:
-            print(f'Explanation class {class_id}: '
-                  f'{explanation} - '
+            print(f'Explanation class {explanations[str(class_id)]["name"]}: '
+                  f'{explanations[str(class_id)]["explanation"]} - '
                   f'acc. = {explanation_accuracy:.4f} - '
                   f'compl. = {explanation_complexity:.4f}')
-
-        if concept_names is not None and class_names is not None:
-            for nc in range(y.shape[1]):
-                explanations[f'{nc}']['explanation'] = replace_names(explanations[f'{nc}']['explanation'],
-                                                                     concept_names)
-                explanations[f'{nc}']['name'] = class_names[nc]
 
     return explanations
 
