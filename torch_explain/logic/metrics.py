@@ -9,7 +9,7 @@ from sympy import to_dnf, lambdify
 
 
 def test_explanation(formula: str, x: torch.Tensor, y: torch.Tensor, target_class: int,
-                     mask: torch.Tensor = None, threshold: float = 0.5):
+                     mask: torch.Tensor = None, threshold: float = 0.5) -> Tuple[float, torch.Tensor]:
     """
     Tests a logic formula.
 
@@ -21,21 +21,21 @@ def test_explanation(formula: str, x: torch.Tensor, y: torch.Tensor, target_clas
     :param threshold: threshold to get concept truth values
     :return: Accuracy of the explanation and predictions
     """
-
     if formula in ['True', 'False', ''] or formula is None:
         return 0.0, None
 
     else:
         assert len(y.shape) == 2
-        y = y[:, target_class]
+        y2 = y[:, target_class]
         concept_list = [f"feature{i:010}" for i in range(x.shape[1])]
         # get predictions using sympy
         explanation = to_dnf(formula)
         fun = lambdify(concept_list, explanation, 'numpy')
         x = x.cpu().detach().numpy()
         predictions = fun(*[x[:, i] > threshold for i in range(x.shape[1])])
-        # get accuracy
-        accuracy = f1_score(y[mask], predictions[mask], average='macro')
+        predictions = torch.LongTensor(predictions)
+        # material implication: (p=>q) <=> (not p or q)
+        accuracy = torch.sum(torch.logical_or(torch.logical_not(predictions[mask]), y2[mask])) / len(y2[mask])
         return accuracy, predictions
 
 
