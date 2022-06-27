@@ -58,6 +58,7 @@ def explain_classes(model: torch.nn.Module, c: torch.Tensor, y: torch.Tensor,
         explanation_complexity = complexity(explanation)
 
         explanations[str(class_id)] = {'explanation': explanation,
+                                       'name': str(class_id),
                                        'explanation_accuracy': explanation_accuracy,
                                        'explanation_complexity': explanation_complexity}
 
