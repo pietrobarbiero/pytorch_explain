@@ -18,7 +18,9 @@ def explain_classes(model: torch.nn.Module, c: torch.Tensor, y: torch.Tensor,
                     train_mask: torch.Tensor, test_mask: torch.Tensor, val_mask: torch.Tensor = None,
                     edge_index: torch.Tensor = None, max_minterm_complexity: int = 1000,
                     topk_explanations: int = 1000, try_all: bool = False,
-                    c_threshold: float = 0.5, y_threshold: float = 0.) -> Dict:
+                    c_threshold: float = 0.5, y_threshold: float = 0.,
+                    concept_names: List[str] = None, class_names: List[str] = None,
+                    verbose: bool = False) -> Dict:
     """
     Explain LENs predictions with concept-based logic explanations.
 
@@ -34,6 +36,9 @@ def explain_classes(model: torch.nn.Module, c: torch.Tensor, y: torch.Tensor,
     :param try_all: if True, then tries all possible conjunctions of the top k explanations
     :param c_threshold: threshold to get truth values for concept predictions (i.e. pred<threshold = false, pred>threshold = true)
     :param y_threshold: threshold to get truth values for class predictions (i.e. pred<threshold = false, pred>threshold = true)
+    :param concept_names: list of concept names
+    :param class_names: list of class names
+    :param verbose: if True, then prints the explanations
     :return: Global explanations
     """
     if len(y.shape) == 1:
@@ -56,8 +61,17 @@ def explain_classes(model: torch.nn.Module, c: torch.Tensor, y: torch.Tensor,
                                        'explanation_accuracy': explanation_accuracy,
                                        'explanation_complexity': explanation_complexity}
 
-        print(
-            f'Explanation class {class_id}: {explanation} - acc. = {explanation_accuracy:.4f} - compl. = {explanation_complexity:.4f}')
+        if verbose:
+            print(f'Explanation class {class_id}: '
+                  f'{explanation} - '
+                  f'acc. = {explanation_accuracy:.4f} - '
+                  f'compl. = {explanation_complexity:.4f}')
+
+        if concept_names is not None and class_names is not None:
+            for nc in range(y.shape[1]):
+                explanations[f'{nc}']['explanation'] = replace_names(explanations[f'{nc}']['explanation'],
+                                                                     concept_names)
+                explanations[f'{nc}']['name'] = class_names[nc]
 
     return explanations
 
