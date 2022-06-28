@@ -4,12 +4,13 @@ import sympy
 
 import torch
 import numpy as np
-from sklearn.metrics import f1_score
+from sklearn.metrics import f1_score, accuracy_score
 from sympy import to_dnf, lambdify
 
 
 def test_explanation(formula: str, x: torch.Tensor, y: torch.Tensor, target_class: int,
-                     mask: torch.Tensor = None, threshold: float = 0.5) -> Tuple[float, torch.Tensor]:
+                     mask: torch.Tensor = None, threshold: float = 0.5,
+                     material: bool = False) -> Tuple[float, torch.Tensor]:
     """
     Tests a logic formula.
 
@@ -34,8 +35,13 @@ def test_explanation(formula: str, x: torch.Tensor, y: torch.Tensor, target_clas
         x = x.cpu().detach().numpy()
         predictions = fun(*[x[:, i] > threshold for i in range(x.shape[1])])
         predictions = torch.LongTensor(predictions)
-        # material implication: (p=>q) <=> (not p or q)
-        accuracy = torch.sum(torch.logical_or(torch.logical_not(predictions[mask]), y2[mask])) / len(y2[mask])
+        if material:
+            # material implication: (p=>q) <=> (not p or q)
+            accuracy = torch.sum(torch.logical_or(torch.logical_not(predictions[mask]), y2[mask])) / len(y2[mask])
+            accuracy = accuracy.item()
+        else:
+            # material biconditional: (p<=>q) <=> (p and q) or (not p and not q)
+            accuracy = accuracy_score(predictions[mask], y2[mask])
         return accuracy, predictions
 
 

@@ -19,7 +19,7 @@ def explain_classes(model: torch.nn.Module, c: torch.Tensor, y: torch.Tensor,
                     edge_index: torch.Tensor = None, max_minterm_complexity: int = 1000,
                     topk_explanations: int = 1000, try_all: bool = False,
                     c_threshold: float = 0.5, y_threshold: float = 0.,
-                    concept_names: List[str] = None, class_names: List[str] = None,
+                    concept_names: List[str] = None, class_names: List[str] = None, material: bool = False,
                     verbose: bool = False) -> Dict:
     """
     Explain LENs predictions with concept-based logic explanations.
@@ -38,6 +38,7 @@ def explain_classes(model: torch.nn.Module, c: torch.Tensor, y: torch.Tensor,
     :param y_threshold: threshold to get truth values for class predictions (i.e. pred<threshold = false, pred>threshold = true)
     :param concept_names: list of concept names
     :param class_names: list of class names
+    :param material: if True, then the explanations performance is computed for the material implication
     :param verbose: if True, then prints the explanations
     :return: Global explanations
     """
@@ -54,7 +55,7 @@ def explain_classes(model: torch.nn.Module, c: torch.Tensor, y: torch.Tensor,
                                        topk_explanations=topk_explanations, try_all=try_all,
                                        c_threshold=c_threshold, y_threshold=y_threshold)
 
-        explanation_accuracy, _ = test_explanation(explanation, c, y, class_id, test_mask, c_threshold)
+        explanation_accuracy, _ = test_explanation(explanation, c, y, class_id, test_mask, c_threshold, material)
         explanation_complexity = complexity(explanation)
 
         explanations[str(class_id)] = {'explanation': explanation,

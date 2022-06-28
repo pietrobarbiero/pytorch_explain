@@ -149,7 +149,8 @@ class TestTemplateObject(unittest.TestCase):
                 # train_mask = test_mask = torch.arange(len(y))
                 explanations = entropy.explain_classes(model, x, y, train_mask, test_mask,
                                                        c_threshold=0.5, y_threshold=0.5, verbose=True,
-                                                       concept_names=concept_names, class_names=class_names)
+                                                       concept_names=concept_names, class_names=class_names,
+                                                       material=True)
 
         return
 
@@ -214,7 +215,10 @@ class TestTemplateObject(unittest.TestCase):
         # extract logic formulas
         explanations = entropy.explain_classes(model, x, y, train_mask, test_mask,
                                                edge_index=edge_index, c_threshold=0,
-                                               topk_explanations=3, verbose=True)
+                                               topk_explanations=3, verbose=True, material=False)
+        explanations = entropy.explain_classes(model, x, y, train_mask, test_mask,
+                                               edge_index=edge_index, c_threshold=0,
+                                               topk_explanations=3, verbose=True, material=True)
 
         return
 
