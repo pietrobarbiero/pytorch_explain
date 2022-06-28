@@ -54,7 +54,7 @@ class TestTemplateObject(unittest.TestCase):
 
                 # compute accuracy
                 if epoch % 100 == 0:
-                    accuracy = y.eq(y_pred>0.5).sum().item() / y.size(0)
+                    accuracy = y.eq(y_pred > 0.5).sum().item() / y.size(0)
                     print(f'Epoch {epoch}: loss {loss:.4f} train accuracy: {accuracy:.4f}')
 
             y1h = one_hot(y.squeeze().long())
@@ -68,7 +68,7 @@ class TestTemplateObject(unittest.TestCase):
             print(cc)
             print(fc)
             accuracy, preds = test_explanation(explanation, x, y1h, target_class=1)
-            print(f'Accuracy: {100*accuracy:.2f}%')
+            print(f'Accuracy: {100 * accuracy:.2f}%')
 
         return
 
@@ -141,19 +141,35 @@ class TestTemplateObject(unittest.TestCase):
 
             # compute accuracy
             if epoch % 100 == 0:
-                train_accuracy = (y_pred[train_mask]>0.5).eq(y[train_mask]).sum().item() / (y.size(0) * y.size(1))
-                test_accuracy = (y_pred[test_mask]>0.5).eq(y[test_mask]).sum().item() / (y.size(0) * y.size(1))
-                print(f'Epoch {epoch}: loss {loss:.4f} train accuracy: {train_accuracy:.4f} test accuracy: {test_accuracy:.4f}')
+                train_accuracy = (y_pred[train_mask] > 0.5).eq(y[train_mask]).sum().item() / (y.size(0) * y.size(1))
+                test_accuracy = (y_pred[test_mask] > 0.5).eq(y[test_mask]).sum().item() / (y.size(0) * y.size(1))
+                print(
+                    f'Epoch {epoch}: loss {loss:.4f} train accuracy: {train_accuracy:.4f} test accuracy: {test_accuracy:.4f}')
 
-                # extract logic formulas
-                # train_mask = test_mask = torch.arange(len(y))
-                explanations = entropy.explain_classes(model, x, y, train_mask, test_mask,
-                                                       c_threshold=0.5, y_threshold=0.5, verbose=True,
-                                                       concept_names=concept_names, class_names=class_names,
-                                                       material=True)
+        # extract logic formulas
+        # train_mask = test_mask = torch.arange(len(y))
+        print()
+        explanations, local_exp = entropy.explain_classes(model, x, y, train_mask, test_mask,
+                                                          c_threshold=0.5, y_threshold=0., verbose=True,
+                                                          concept_names=concept_names, class_names=class_names,
+                                                          material=True, good_bad_terms=True, max_accuracy=True)
+        print(explanations)
+        print()
+        explanations, local_exp = entropy.explain_classes(model, x, y, train_mask, test_mask,
+                                                          c_threshold=0.5, y_threshold=0., verbose=True,
+                                                          concept_names=concept_names, class_names=class_names,
+                                                          material=True, good_bad_terms=True, max_accuracy=False)
+        print(explanations)
+        print()
+        explanations, local_exp = entropy.explain_classes(model, x, y, train_mask, test_mask,
+                                                          c_threshold=0.5, y_threshold=0., verbose=True,
+                                                          concept_names=concept_names, class_names=class_names,
+                                                          material=True, good_bad_terms=False, max_accuracy=False)
+        print(explanations)
+        print()
+        print(local_exp)
 
         return
-
 
     # def test_entropy_gnn(self):
     #     x, y = make_classification(n_samples=1000, n_features=20, random_state=42)

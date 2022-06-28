@@ -19,8 +19,9 @@ def explain_classes(model: torch.nn.Module, c: torch.Tensor, y: torch.Tensor,
                     edge_index: torch.Tensor = None, max_minterm_complexity: int = 1000,
                     topk_explanations: int = 1000, try_all: bool = False,
                     c_threshold: float = 0.5, y_threshold: float = 0.,
-                    concept_names: List[str] = None, class_names: List[str] = None, material: bool = False,
-                    verbose: bool = False) -> Dict:
+                    concept_names: List[str] = None, class_names: List[str] = None,
+                    material: bool = False, good_bad_terms: bool = False, max_accuracy: bool = False,
+                    verbose: bool = False) -> Tuple[Dict, Dict]:
     """
     Explain LENs predictions with concept-based logic explanations.
 
@@ -39,8 +40,10 @@ def explain_classes(model: torch.nn.Module, c: torch.Tensor, y: torch.Tensor,
     :param concept_names: list of concept names
     :param class_names: list of class names
     :param material: if True, then the explanations performance is computed for the material implication
+    :param good_bad_terms: if True, then good and bad terms are selected for local explanations
+    :param max_accuracy: if True, then the explanations performance is computed for the maximum accuracy
     :param verbose: if True, then prints the explanations
-    :return: Global explanations
+    :return: Global and local explanations
     """
     if len(y.shape) == 1:
         y = one_hot(y)
@@ -49,15 +52,19 @@ def explain_classes(model: torch.nn.Module, c: torch.Tensor, y: torch.Tensor,
         val_mask = train_mask
 
     explanations = {}
+    local_explanations = {}
     for class_id in range(y.shape[1]):
-        explanation, _ = explain_class(model, c, y, train_mask, val_mask, target_class=class_id,
-                                       edge_index=edge_index, max_minterm_complexity=max_minterm_complexity,
-                                       topk_explanations=topk_explanations, try_all=try_all,
-                                       c_threshold=c_threshold, y_threshold=y_threshold)
+        explanation, local_explanations_raw = explain_class(model, c, y, train_mask, val_mask, target_class=class_id,
+                                                            edge_index=edge_index,
+                                                            max_minterm_complexity=max_minterm_complexity,
+                                                            topk_explanations=topk_explanations, try_all=try_all,
+                                                            c_threshold=c_threshold, y_threshold=y_threshold,
+                                                            max_accuracy=max_accuracy, good_bad_terms=good_bad_terms)
 
         explanation_accuracy, _ = test_explanation(explanation, c, y, class_id, test_mask, c_threshold, material)
         explanation_complexity = complexity(explanation)
 
+        local_explanations[class_id] = local_explanations_raw
         explanations[str(class_id)] = {'explanation': explanation,
                                        'name': str(class_id),
                                        'explanation_accuracy': explanation_accuracy,
@@ -65,7 +72,7 @@ def explain_classes(model: torch.nn.Module, c: torch.Tensor, y: torch.Tensor,
 
         if concept_names is not None and class_names is not None:
             explanations[str(class_id)]['explanation'] = replace_names(explanations[str(class_id)]['explanation'],
-                                                                 concept_names)
+                                                                       concept_names)
             explanations[str(class_id)]['name'] = class_names[class_id]
 
         if verbose:
@@ -74,14 +81,14 @@ def explain_classes(model: torch.nn.Module, c: torch.Tensor, y: torch.Tensor,
                   f'acc. = {explanation_accuracy:.4f} - '
                   f'compl. = {explanation_complexity:.4f}')
 
-    return explanations
+    return explanations, local_explanations
 
 
 def explain_class(model: torch.nn.Module, c: torch.Tensor, y: torch.Tensor,
                   train_mask: torch.Tensor, val_mask: torch.Tensor, target_class: int, edge_index: torch.Tensor = None,
                   max_minterm_complexity: int = None, topk_explanations: int = 3, max_accuracy: bool = False,
                   concept_names: List = None, try_all: bool = True, c_threshold: float = 0.5,
-                  y_threshold: float = 0.) -> Tuple[str, str]:
+                  y_threshold: float = 0., good_bad_terms: bool = False) -> Tuple[str, Dict]:
     """
     Generate a local explanation for a single sample.
     :param model: pytorch model
@@ -98,6 +105,7 @@ def explain_class(model: torch.nn.Module, c: torch.Tensor, y: torch.Tensor,
     :param try_all: if True, then tries all possible conjunctions of the top k explanations
     :param c_threshold: threshold to get truth values for concept predictions (i.e. pred<threshold = false, pred>threshold = true)
     :param y_threshold: threshold to get truth values for class predictions (i.e. pred<threshold = false, pred>threshold = true)
+    :param good_bad_terms: if True, then good and bad terms are selected for local explanations
     :return: Global explanation
     """
     c_correct, y_correct, correct_mask, active_mask = _get_correct_data(c, y, train_mask, model, target_class,
@@ -107,14 +115,12 @@ def explain_class(model: torch.nn.Module, c: torch.Tensor, y: torch.Tensor,
 
     feature_names = [f"feature{j:010}" for j in range(c_correct.size(1))]
     class_explanation = ""
-    class_explanation_raw = ""
+    local_explanations = []
+    local_explanations_accuracies = {}
+    local_explanations_raw = {}
+    idx_and_exp = []
     for layer_id, module in enumerate(model.children()):
         if isinstance(module, EntropyLinear):
-            local_explanations = []
-            local_explanations_accuracies = {}
-            local_explanations_raw = {}
-
-            idx_and_exp = []
 
             # look at the "positive" rows of the truth table only
             positive_samples = torch.nonzero(y_correct[:, target_class]).numpy().ravel()
@@ -142,19 +148,20 @@ def explain_class(model: torch.nn.Module, c: torch.Tensor, y: torch.Tensor,
                     local_explanations.append(local_explanation)
 
             for positive_sample, local_explanation_raw in idx_and_exp:
-                sample_pos = train_mask[positive_sample]
-                good, bad = get_the_good_and_bad_terms(
-                    model=model,
-                    c=c,
-                    edge_index=edge_index,
-                    sample_pos=sample_pos,
-                    explanation=local_explanation_raw,
-                    target_class=target_class,
-                    concept_names=feature_names,
-                    threshold=c_threshold
-                )
+                if good_bad_terms:
+                    sample_pos = train_mask[positive_sample]
+                    good, bad = get_the_good_and_bad_terms(
+                        model=model,
+                        c=c,
+                        edge_index=edge_index,
+                        sample_pos=sample_pos,
+                        explanation=local_explanation_raw,
+                        target_class=target_class,
+                        concept_names=feature_names,
+                        threshold=c_threshold
+                    )
 
-                local_explanation_raw = " & ".join(good)
+                    local_explanation_raw = " & ".join(good)
 
                 # test explanation accuracy
                 if local_explanation_raw not in local_explanations_accuracies:
@@ -193,7 +200,7 @@ def explain_class(model: torch.nn.Module, c: torch.Tensor, y: torch.Tensor,
 
             break
 
-    return class_explanation[1:-1], class_explanation_raw
+    return class_explanation[1:-1], local_explanations_accuracies
 
 
 def _simplify_formula(
