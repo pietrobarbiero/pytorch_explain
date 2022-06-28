@@ -21,9 +21,7 @@ URL = 'https://github.com/pietrobarbiero/pytorch_explain'
 LICENSE = 'Apache 2.0'
 DOWNLOAD_URL = 'https://github.com/pietrobarbiero/pytorch_explain'
 VERSION = __version__
-INSTALL_REQUIRES = ['numpy', 'scipy', 'scikit-learn', 'pandas', 'torch', 'sympy',
-                    'networkx', 'torch-scatter', 'torch-sparse', 'torch-cluster', 'torch-spline-conv',
-                    'torch-geometric']
+INSTALL_REQUIRES = ['numpy', 'scipy', 'scikit-learn', 'pandas', 'torch', 'sympy']
 CLASSIFIERS = ['Intended Audience :: Science/Research',
                'Intended Audience :: Developers',
                'License :: OSI Approved',
