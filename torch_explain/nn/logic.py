@@ -45,11 +45,16 @@ class EntropyLinear(nn.Module):
         # weight the input concepts by awareness scores
         self.alpha_norm = self.alpha / self.alpha.max(dim=1)[0].unsqueeze(1)
         self.concept_mask = self.alpha_norm > 0.5
+        # if len(input.shape) == 3:
+        #     x = input.unsqueeze(1).multiply(self.alpha_norm.unsqueeze(0).unsqueeze(-1))
+        #     x = torch.einsum('btce,thc->bteh', x, self.weight)
+        #     x = x.reshape(-1, x.shape[-1])
+        # else:
         x = input.multiply(self.alpha_norm.unsqueeze(1))
-
-        # compute linear map
         x = x.matmul(self.weight.permute(0, 2, 1)) + self.bias
-        return x.permute(1, 0, 2)
+        x = x.permute(1, 0, 2)
+
+        return x
 
     def extra_repr(self) -> str:
         return 'in_features={}, out_features={}, n_classes={}'.format(
