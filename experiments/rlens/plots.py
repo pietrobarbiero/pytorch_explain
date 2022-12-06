@@ -6,16 +6,7 @@ import os
 
 
 def main():
-    datasets = ['xor', 'trig', 'vec']
-    folds = [i + 1 for i in range(5)]
-    results = pd.DataFrame()
-    for dataset in datasets:
-        res = pd.read_csv(f'./results/{dataset}_activations_final_rerun/explanations/reasoner_results.csv', index_col=None)
-        res['dataset'] = dataset
-        if len(results) == 0:
-            results = res
-        else:
-            results = pd.concat((results, res))
+    results = pd.read_csv(f'./results/reasoner_results.csv', index_col=None)
 
     res_dir = f'./results/'
     os.makedirs(res_dir, exist_ok=True)
@@ -24,9 +15,9 @@ def main():
     sns.set_style('whitegrid')
     sns.despine()
     plt.figure(figsize=[5, 3])
-    plt.title('R2N results')
+    plt.title('Task Accuracy')
     sns.barplot(data=results, x="dataset", y="accuracy", hue='model')
-    plt.ylim([0.5, 1.01])
+    plt.ylim([0.8, 1.01])
     plt.tight_layout()
     plt.savefig(out_file)
     plt.show()
