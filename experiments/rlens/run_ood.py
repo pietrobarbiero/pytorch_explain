@@ -3,6 +3,10 @@ import numpy as np
 import os
 
 import torch
+from matplotlib import pyplot as plt
+import seaborn as sns
+from sklearn.manifold import TSNE
+from sklearn.model_selection import StratifiedKFold
 from torch.nn import BCELoss
 from torch.nn.functional import one_hot
 
@@ -15,7 +19,8 @@ def main():
     # datasets = ['trig']
     folds = [i+1 for i in range(5)]
     train_epochs = 500
-    epochs = 5000
+    epochs = 10000
+    few_shot_epochs = 10
     lr = 0.008
     results = pd.DataFrame()
     for dataset in datasets:
@@ -47,33 +52,69 @@ def main():
             reasoner = get_reasoner(ProductTNorm(), scorer, BCELoss())
             model = DeepConceptReasoner(rule_learner, reasoner, scorer, concept_names, class_names, verbose=True)
             model.fit(c[train_mask], c_emb[train_mask], c[train_mask], y1h[train_mask], lr, epochs)
+
+            # define OOD task
+            # y_ood = ((c[:, 0] > 0.5) & (c[:, 1] > 0.5)).long().detach()
+            # y_ood = (torch.logical_not(c[:, 0] > 0.5)).long().detach()
+            y_ood = torch.logical_and(c[:, 0] > 0.5, c[:, 1] > 0.5).long().detach()
+            y1h_ood = one_hot(y_ood).float()
+            # ood_rule = [{'explanation': 'x0', 'name': 'y_ood1'},
+            #             {'explanation': '~x0', 'name': 'y_ood2'}]
+            ood_rule = [{'explanation': 'x0 & x1', 'name': 'y_ood2'}]
+
+            # # x_wmc = torch.sigmoid(c_emb[test_mask])
+            # # y_emb = self.reasoner(x_wmc, self.concept_names, self.learnt_rules_)
+            # # y_pred = self.scorer(y_emb).squeeze(-1)
+            # tsne = TSNE()
+            # c2 = tsne.fit_transform(torch.sigmoid(c_emb[test_mask, 0].squeeze()))
+            # mask1 = y_ood[test_mask] > 0.5
+            # mask2 = c[test_mask, 0] > 0.5
+            # plt.figure()
+            # plt.scatter(c2[mask1, 0], c2[mask1, 1], s=50)
+            # plt.scatter(c2[~mask1, 0], c2[~mask1, 1], s=50)
+            # plt.scatter(c2[mask2, 0], c2[mask2, 1], marker='+', s=5)
+            # plt.scatter(c2[~mask2, 0], c2[~mask2, 1], marker='+', s=5)
+            # plt.show()
+
+
+            # few shot learning
+            # skf = StratifiedKFold(n_splits=10, shuffle=False)
+            # test_mask_ood, train_mask_ood = next(iter(skf.split(c[test_mask], y_ood[test_mask])))
+            model.learnt_rules_ = ood_rule
+            # model.fit(c[test_mask][train_mask_ood], c_emb[test_mask][train_mask_ood], y1h_ood[test_mask][train_mask_ood], lr, few_shot_epochs, use_learnt_rules=False)
+
             y_test_pred_reasoner, y_test_pred_learner, c_pred_reasoner, y_pred_bool = model.predict(c[test_mask], c_emb[test_mask])
 
-            test_accuracy_learner = (y_test_pred_learner > 0.5).eq(y1h[test_mask]).sum().item() / (y1h[test_mask].size(0) * y1h[test_mask].size(1))
+            test_accuracy_learner = 0
+            # test_accuracy_learner = np.mean([y_test_pred_learner.argmax(axis=-1).eq(y_ood[test_mask][test_mask_ood]).sum().item() / y[test_mask][test_mask_ood].size(0),
+            #                                  (y_test_pred_learner[:, :2] > 0.).eq(y1h[test_mask][test_mask_ood]).sum().item() / (y1h[test_mask][test_mask_ood].size(0) * y1h[test_mask][test_mask_ood].size(1))])
             print(f'Test accuracy learner: {test_accuracy_learner:.4f}')
-            test_accuracy_reasoner = (y_test_pred_reasoner > 0.5).eq(y1h[test_mask]).sum().item() / (y1h[test_mask].size(0) * y1h[test_mask].size(1))
+            # test_accuracy_reasoner = np.mean([(y_test_pred_reasoner[:, 2] > 0.).eq(y_ood[test_mask][test_mask_ood]).sum().item() / y1h_ood[test_mask][test_mask_ood].size(0),
+            #                                  (y_test_pred_reasoner[:, :2] > 0.).eq(y1h[test_mask][test_mask_ood]).sum().item() / (y1h[test_mask][test_mask_ood].size(0) * y1h[test_mask][test_mask_ood].size(1))])
+            test_accuracy_reasoner = (y_test_pred_reasoner.squeeze() > 0.5).eq(y_ood[test_mask]).sum().item() / y1h_ood[test_mask].size(0)
             print(f'Test accuracy reasoner: {test_accuracy_reasoner:.4f}')
-            test_accuracy_bool = (y_pred_bool.squeeze() > 0.5).eq(y1h[test_mask]).sum().item() / (y1h[test_mask].size(0) * y1h[test_mask].size(1))
+            test_accuracy_bool = (y_pred_bool.squeeze() > 0.5).eq(y_ood[test_mask]).sum().item() / y1h_ood[test_mask].size(0)
             print(f'Test accuracy reasoner (bool): {test_accuracy_bool:.4f}')
             c_accuracy_reasoner = (c_pred_reasoner > 0.5).eq(c[test_mask]>0.5).sum().item() / (c[test_mask].size(0) * c[test_mask].size(1))
             print(f'Test concept accuracy reasoner: {c_accuracy_reasoner:.4f}')
-            test_accuracy_cem = (y_cem[test_mask] > 0.).eq(y[test_mask]).sum().item() / len(y[test_mask])
+            test_accuracy_cem = 0
+            # test_accuracy_cem = np.mean([(y_cem[test_mask_ood] > 0.).eq(y_ood[test_mask_ood]).sum().item() / y[test_mask_ood].size(0),
+            #                              (y_cem[test_mask_ood] > 0.).eq(y[test_mask_ood]).sum().item() / y[test_mask_ood].size(0)])
             print(f'Test accuracy CEM: {test_accuracy_cem:.4f}')
 
-            res_dir = f'./results-2/'
+            res_dir = f'./results/ood/'
             os.makedirs(res_dir, exist_ok=True)
             out_file = os.path.join(res_dir, 'reasoner_results.csv')
 
             res1 = pd.DataFrame([[model.learnt_rules_, test_accuracy_reasoner, fold, 'DCR', dataset]], columns=['rules', 'accuracy', 'fold', 'model', 'dataset'])
             res2 = pd.DataFrame([[None, test_accuracy_cem, fold, 'CEM', dataset]], columns=['rules', 'accuracy', 'fold', 'model', 'dataset'])
-            res3 = pd.DataFrame([[None, test_accuracy_learner, fold, 'LENs', dataset]], columns=['rules', 'accuracy', 'fold', 'model', 'dataset'])
-            res4 = pd.DataFrame([[model.learnt_rules_, test_accuracy_bool, fold, 'TNorm', dataset]], columns=['rules', 'accuracy', 'fold', 'model', 'dataset'])
+            res3 = pd.DataFrame([[model.learnt_rules_, test_accuracy_learner, fold, 'LENs', dataset]], columns=['rules', 'accuracy', 'fold', 'model', 'dataset'])
 
             if len(results) == 0:
                 results = res1
-                results = pd.concat((results, res2, res3, res4))
+                results = pd.concat((results, res2, res3))
             else:
-                results = pd.concat((results, res1, res2, res3, res4))
+                results = pd.concat((results, res1, res2, res3))
 
             results.to_csv(out_file)
 
