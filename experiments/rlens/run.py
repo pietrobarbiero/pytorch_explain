@@ -60,7 +60,7 @@ def main():
             test_accuracy_cem = (y_cem[test_mask] > 0.).eq(y[test_mask]).sum().item() / len(y[test_mask])
             print(f'Test accuracy CEM: {test_accuracy_cem:.4f}')
 
-            res_dir = f'./results-2/'
+            res_dir = f'./results/'
             os.makedirs(res_dir, exist_ok=True)
             out_file = os.path.join(res_dir, 'reasoner_results.csv')
 
