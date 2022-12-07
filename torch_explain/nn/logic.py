@@ -66,34 +66,55 @@ class EntropyLinear(nn.Module):
 
 
 class R2NPropositionalLayer(nn.Module):
-    def __init__(self, logic=ProductTNorm()):
+    def __init__(self, logic=ProductTNorm(), scorer=None, loss_form=None):
         super(R2NPropositionalLayer, self).__init__()
         self.logic = logic
+        self.scorer = scorer
+        self.loss_form = loss_form
 
-    def forward(self, x, concepts_names, rules):
+    def forward(self, x, concepts_names, rules, c_bool=None):
+        self.loss_ = 0
         self.tree_ = serialize_len_rules(concepts=concepts_names, rules=rules)
+        if c_bool is None:
+            c_bool = self.scorer(torch.sigmoid(x)).squeeze()
         tasks = []
+        tasks_bool = []
         for r in self.tree_.roots:
-            tasks.append(self._visit(r, x))
-        return torch.concat(tasks, dim=1)
+            t_emb, t_bool = self._visit(r, x, c_bool)
+            tasks.append(t_emb)
+            tasks_bool.append(t_bool)
+        return torch.concat(tasks, dim=1), torch.concat(tasks_bool, dim=1)
 
-    def _visit(self, node, x):
+    def _visit(self, node, x, c_bool):
 
         if isinstance(node, Concept):
-            return x[:, node.id:node.id + 1]
+            return x[:, node.id:node.id + 1], c_bool[:, node.id:node.id + 1]
         else:
             visited = []
+            visited_bool = []
             for c in node.children:
-                visited.append(self._visit(c, x))
+                x_viz, c_viz = self._visit(c, x, c_bool)
+                visited.append(x_viz)
+                visited_bool.append(c_viz)
             visited = torch.concat(visited, dim=1)
+            visited_bool = torch.concat(visited_bool, dim=1)
             if isinstance(node, Not):
-                return self.logic.neg(visited)
+                ops_result = self.logic.neg(visited)
+                c_bool = self.logic.neg(visited_bool) > 0.5
             elif isinstance(node, And):
-                return self.logic.conj(visited)
+                ops_result = self.logic.conj(visited)
+                c_bool = self.logic.conj(visited_bool) > 0.5
             elif isinstance(node, Or):
-                return self.logic.disj(visited)
+                ops_result = self.logic.disj(visited)
+                c_bool = self.logic.disj(visited_bool) > 0.5
             else:
                 raise Exception("Node class not known." % node.__type__)
+
+            c_bool = c_bool.float()
+            preds = self.scorer(torch.sigmoid(ops_result)).squeeze()
+            self.loss_ += self.loss_form(preds, c_bool.squeeze())
+
+            return ops_result, c_bool
 
 
 if __name__ == '__main__':
