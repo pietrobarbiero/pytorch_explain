@@ -76,25 +76,25 @@ class DeepConceptReasoner(torch.nn.Module):
     def fit(self, x_sem, x_emb, c, y, lr, epochs, use_learnt_rules=True):
         y_pred_reasoner, y_pred_learner = None, None
 
-        # train rule learner
-        print('\nRule learning...')
-        self.rule_optimizer = torch.optim.AdamW(self.rule_learner.parameters(), lr=lr)
-        self.rule_learner.train()
-        loss_form = torch.nn.BCEWithLogitsLoss()
-        for epoch in range(epochs):
-            self.rule_optimizer.zero_grad()
-            y_pred_learner, _ = self.forward(x_sem, 'learner')
-            loss = loss_form(y_pred_learner, y)
-            loss.backward()
-            self.rule_optimizer.step()
-
-            # compute accuracy
-            if epoch % 100 == 0 and self.verbose:
-                train_accuracy = (y_pred_learner > 0.).eq(y).sum().item() / (y.size(0) * y.size(1))
-                print(f'Epoch {epoch}: loss {loss:.4f} train accuracy: {train_accuracy:.4f}')
-
         # get learnt rules
         if use_learnt_rules:
+            # train rule learner
+            print('\nRule learning...')
+            self.rule_optimizer = torch.optim.AdamW(self.rule_learner.parameters(), lr=lr)
+            self.rule_learner.train()
+            loss_form = torch.nn.BCEWithLogitsLoss()
+            for epoch in range(epochs):
+                self.rule_optimizer.zero_grad()
+                y_pred_learner, _ = self.forward(x_sem, 'learner')
+                loss = loss_form(y_pred_learner, y)
+                loss.backward()
+                self.rule_optimizer.step()
+
+                # compute accuracy
+                if epoch % 100 == 0 and self.verbose:
+                    train_accuracy = (y_pred_learner > 0.).eq(y).sum().item() / (y.size(0) * y.size(1))
+                    print(f'Epoch {epoch}: loss {loss:.4f} train accuracy: {train_accuracy:.4f}')
+
             self.learnt_rules_ = self.learn_rules(x_sem, y)
 
         # train reasoner

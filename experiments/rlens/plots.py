@@ -1,13 +1,14 @@
+import itertools
+
 import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
-import numpy as np
 import os
 
 
 def main():
     ood = False
-    # ood = True
+    ood = True
     results = pd.read_csv(f'./results/reasoner_results.csv', index_col=None)
     res_dir = f'./results/'
     if ood:
@@ -25,10 +26,16 @@ def main():
     plt.title('Task Accuracy')
     if ood:
         plt.title('OOD Task Accuracy')
-    sns.barplot(data=results, x="dataset", y="accuracy", hue='model')
+    ax = sns.barplot(data=results, x="dataset", y="accuracy", hue='model')
+    num_locations = len(results["dataset"].unique())
+    hatches = itertools.cycle(['', '/', '/', ''])
+    for i, bar in enumerate(ax.patches):
+        if i % num_locations == 0:
+            hatch = next(hatches)
+        bar.set_hatch(hatch)
     plt.ylim([0.5, 1.01])
-    if ood:
-        plt.ylim([0., 1.01])
+    # if ood:
+    #     plt.ylim([0., 1.01])
     plt.tight_layout()
     plt.savefig(out_file)
     plt.show()
