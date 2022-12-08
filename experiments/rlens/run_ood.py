@@ -16,7 +16,7 @@ from torch_explain.logic.semantics import ProductTNorm
 
 def main():
     datasets = ['xor', 'trig', 'vec']
-    # datasets = ['vec']
+    datasets = ['xor']
     folds = [i + 1 for i in range(5)]
     train_epochs = 500
     epochs = 10000

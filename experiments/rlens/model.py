@@ -20,23 +20,23 @@ def get_reasoner(logic, scorer, loss_form):
     return R2NPropositionalLayer(logic, scorer, loss_form)
 
 
-class Scorer(nn.Module):
-    def __init__(self, emb_size):
-        super(Scorer, self).__init__()
-        self.w = torch.nn.Parameter(torch.randn(emb_size), requires_grad=True)
-
-    def forward(self, x):
-        # xt = torch.sigmoid(x)
-        xt = x.reshape(x.shape[0]*x.shape[1], -1)
-        xt = xt.matmul(self.w)
-        xt = xt.reshape(x.shape[0], x.shape[1])
-        return torch.sigmoid(xt) #torch.log(xt) - 1
+# class Scorer(nn.Module):
+#     def __init__(self, emb_size):
+#         super(Scorer, self).__init__()
+#         self.w = torch.nn.Parameter(torch.randn(emb_size), requires_grad=True)
+#
+#     def forward(self, x):
+#         # xt = torch.sigmoid(x)
+#         xt = x.reshape(x.shape[0]*x.shape[1], -1)
+#         xt = xt.matmul(self.w)
+#         xt = xt.reshape(x.shape[0], x.shape[1])
+#         return torch.sigmoid(xt) #torch.log(xt) - 1
 
 
 def get_scorer(emb_size):
-    # return nn.Sequential(torch.nn.Linear(emb_size, 10, bias=False),
-    #                      torch.nn.Sigmoid())
-    return nn.Sequential(Scorer(emb_size))
+    return nn.Sequential(torch.nn.Linear(emb_size, emb_size, bias=False),
+                         torch.nn.Softmax(dim=-1)) # domanda su scorer
+    # return nn.Sequential(Scorer(emb_size))
 
 
 class DeepConceptReasoner(torch.nn.Module):
@@ -65,9 +65,8 @@ class DeepConceptReasoner(torch.nn.Module):
         elif predictor == 'ProbLog':
             raise NotImplementedError
         elif predictor == 'reasoner':
-            x_wmc = torch.sigmoid(x)
-            y_emb, y_bool = self.reasoner(x_wmc, self.concept_names, self.learnt_rules_, c)
-            y_pred = self.scorer(y_emb).squeeze(-1)
+            y_emb, y_bool = self.reasoner(x, self.concept_names, self.learnt_rules_, c)
+            y_pred = self.reasoner.predict_proba(y_emb).squeeze(-1)
         else:
             raise NotImplementedError
 
@@ -103,22 +102,23 @@ class DeepConceptReasoner(torch.nn.Module):
         self.reasoner_optimizer = torch.optim.AdamW(params, lr=lr)
         self.reasoner.train()
         self.scorer.train()
-        loss_form = torch.nn.BCELoss()
+        loss_form = torch.nn.BCEWithLogitsLoss()
         for epoch in range(epochs):
             self.reasoner_optimizer.zero_grad()
+            # x_wmc = self.scorer(x_emb)
+            c_pred_reasoner = self.reasoner.predict_proba(x_emb)
             y_pred_reasoner, y_pred_bool = self.forward(x_emb, 'reasoner', (c > 0.5).float())
-            c_pred_reasoner = self.scorer(torch.sigmoid(x_emb)).squeeze()
             loss1 = loss_form(y_pred_reasoner, y)
             loss2 = loss_form(c_pred_reasoner, (c > 0.5).float())
-            loss = 0.5 * loss1 + loss2 + self.reasoner.loss_
+            loss = 0.5 * loss1 + loss2 #+ self.reasoner.loss_
             loss.backward()
             self.reasoner_optimizer.step()
 
             # compute accuracy
             if epoch % 100 == 0 and self.verbose:
-                train_accuracy = (y_pred_reasoner > 0.5).eq(y).sum().item() / (y.size(0) * y.size(1))
+                train_accuracy = (y_pred_reasoner > 0.).eq(y).sum().item() / (y.size(0) * y.size(1))
                 bool_accuracy = (y_pred_bool > 0.5).eq(y).sum().item() / (y.size(0) * y.size(1))
-                c_accuracy = (c_pred_reasoner > 0.5).eq(c > 0.5).sum().item() / (c.size(0) * c.size(1))
+                c_accuracy = (c_pred_reasoner > 0.).eq(c > 0.5).sum().item() / (c.size(0) * c.size(1))
                 print(f'Epoch {epoch}: loss {loss:.4f} train accuracy: {train_accuracy:.4f} concept accuracy: {c_accuracy:.4f} (train bool: {bool_accuracy:.4f})')
 
         return y_pred_reasoner, y_pred_learner
@@ -137,7 +137,7 @@ class DeepConceptReasoner(torch.nn.Module):
         print('Reasoning inference...')
         self.reasoner.eval()
         self.scorer.eval()
+        c_pred_reasoner = self.reasoner.predict_proba(x_emb)
         y_pred_reasoner, y_pred_bool = self.forward(x_emb, 'reasoner', (x_sem > 0.5).float())
-        c_pred_reasoner = self.scorer(torch.sigmoid(x_emb)).squeeze()
 
         return y_pred_reasoner, y_pred_learner, c_pred_reasoner, y_pred_bool

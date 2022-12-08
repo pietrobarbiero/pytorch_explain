@@ -7,15 +7,16 @@ from torch.nn import BCELoss
 from torch.nn.functional import one_hot
 
 from experiments.rlens.model import get_rule_learner, get_scorer, DeepConceptReasoner, get_reasoner
-from torch_explain.logic.semantics import ProductTNorm
+from torch_explain.logic.semantics import ProductTNorm, VectorLogic
 
+torch.autograd.set_detect_anomaly(True)
 
 def main():
     datasets = ['xor', 'trig', 'vec']
-    # datasets = ['trig']
+    # datasets = ['vec']
     folds = [i+1 for i in range(5)]
     train_epochs = 500
-    epochs = 5000
+    epochs = 1000
     lr = 0.008
     results = pd.DataFrame()
     for dataset in datasets:
@@ -44,18 +45,19 @@ def main():
 
             rule_learner = get_rule_learner(c.shape[1], y1h.shape[1], temperature=10)
             scorer = get_scorer(c_emb.shape[2])
-            reasoner = get_reasoner(ProductTNorm(), scorer, BCELoss())
+            # reasoner = get_reasoner(ProductTNorm(), scorer, BCELoss())
+            reasoner = get_reasoner(VectorLogic(c_emb.shape[2]), scorer, BCELoss())
             model = DeepConceptReasoner(rule_learner, reasoner, scorer, concept_names, class_names, verbose=True)
             model.fit(c[train_mask], c_emb[train_mask], c[train_mask], y1h[train_mask], lr, epochs)
             y_test_pred_reasoner, y_test_pred_learner, c_pred_reasoner, y_pred_bool = model.predict(c[test_mask], c_emb[test_mask])
 
-            test_accuracy_learner = (y_test_pred_learner > 0.5).eq(y1h[test_mask]).sum().item() / (y1h[test_mask].size(0) * y1h[test_mask].size(1))
+            test_accuracy_learner = (y_test_pred_learner > 0.).eq(y1h[test_mask]).sum().item() / (y1h[test_mask].size(0) * y1h[test_mask].size(1))
             print(f'Test accuracy learner: {test_accuracy_learner:.4f}')
-            test_accuracy_reasoner = (y_test_pred_reasoner > 0.5).eq(y1h[test_mask]).sum().item() / (y1h[test_mask].size(0) * y1h[test_mask].size(1))
+            test_accuracy_reasoner = (y_test_pred_reasoner > 0.).eq(y1h[test_mask]).sum().item() / (y1h[test_mask].size(0) * y1h[test_mask].size(1))
             print(f'Test accuracy reasoner: {test_accuracy_reasoner:.4f}')
             test_accuracy_bool = (y_pred_bool.squeeze() > 0.5).eq(y1h[test_mask]).sum().item() / (y1h[test_mask].size(0) * y1h[test_mask].size(1))
             print(f'Test accuracy reasoner (bool): {test_accuracy_bool:.4f}')
-            c_accuracy_reasoner = (c_pred_reasoner > 0.5).eq(c[test_mask]>0.5).sum().item() / (c[test_mask].size(0) * c[test_mask].size(1))
+            c_accuracy_reasoner = (c_pred_reasoner > 0.).eq(c[test_mask]>0.5).sum().item() / (c[test_mask].size(0) * c[test_mask].size(1))
             print(f'Test concept accuracy reasoner: {c_accuracy_reasoner:.4f}')
             test_accuracy_cem = (y_cem[test_mask] > 0.).eq(y[test_mask]).sum().item() / len(y[test_mask])
             print(f'Test accuracy CEM: {test_accuracy_cem:.4f}')
