@@ -1,5 +1,6 @@
 import abc
 import torch
+from torch.nn import functional as F
 
 
 class Logic:
@@ -49,24 +50,33 @@ class GodelTNorm(Logic):
     def neg(self, a):
         return 1 - a
 
-class VectorLogic(Logic):
+class VectorLogic(Logic, torch.nn.Module):
     def __init__(self, emb_size):
         super(VectorLogic, self).__init__()
         self.emb_size = emb_size
-        self.truth = torch.nn.Parameter(torch.randn(emb_size, 1), requires_grad=False)
-        self.false = torch.nn.Parameter(torch.randn(emb_size, 1), requires_grad=False)
-        self.update()
+        self._truth = torch.nn.Parameter(torch.randn(emb_size, 1), requires_grad=True)
+        self._false = torch.randn(self.truth.shape)
+        # self.false = torch.nn.Parameter(torch.randn(emb_size, 1), requires_grad=True)
+        torch.nn.init.normal_(self.truth)
+        # torch.nn.init.normal_(self.false)
         # truth = torch.FloatTensor([[1], [0]])
         # false = torch.FloatTensor([[0], [1]])
+        self.update()
+
+    @property
+    def truth(self):
+        return F.normalize(self._truth, p=2, dim=0)
+
+    @property
+    def false(self):
+        truth = self.truth
+        truth_false_proj = truth.T.matmul(self._false)
+        false = F.normalize(self._false - truth_false_proj * truth, p=2, dim=0)
+        return false
 
     def update(self):
-        # make reference vectors orthonormal
-        truth_norm = torch.norm(self.truth.clone())
-        truth = self.truth.clone() / truth_norm
-        truth_false_proj = truth.T.matmul(self.false)
-        false = self.false - truth_false_proj * truth
-        false_norm = torch.norm(false)
-        false = false / false_norm
+        truth = self.truth
+        false = self.false
 
         tt = torch.kron(truth, truth).T
         tf = torch.kron(truth, false).T
