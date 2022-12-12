@@ -69,15 +69,12 @@ class R2NPropositionalLayer(nn.Module):
     def __init__(self, logic=ProductTNorm(), scorer=None, loss_form=None):
         super(R2NPropositionalLayer, self).__init__()
         self.logic = logic
-        self.scorer = scorer
         self.loss_form = loss_form
 
     def forward(self, x, concepts_names, rules, c_bool=None):
-        # self.logic.update()
+        self.logic.update()
         self.loss_ = 0
         self.tree_ = serialize_len_rules(concepts=concepts_names, rules=rules)
-        if c_bool is None:
-            c_bool = self.scorer(torch.sigmoid(x)).squeeze()
         tasks = []
         tasks_bool = []
         for r in self.tree_.roots:
@@ -99,20 +96,19 @@ class R2NPropositionalLayer(nn.Module):
                 visited_bool.append(c_viz)
             visited = torch.concat(visited, dim=1)
             visited_bool = torch.concat(visited_bool, dim=1)
+            ops_result, c_bool = visited, visited_bool
             if isinstance(node, Not):
                 ops_result = self.logic.neg(visited)
                 c_bool = torch.logical_not(visited_bool)
                 # print('not', c_bool.shape)
-            elif isinstance(node, And):
+            elif isinstance(node, And) and visited.shape[1] > 1:
                 ops_result = self.logic.conj(visited)
                 c_bool = torch.logical_and(visited_bool[:, 0], visited_bool[:, 1]).unsqueeze(1)
                 # print('and', c_bool.shape)
-            elif isinstance(node, Or):
+            elif isinstance(node, Or) and visited.shape[1] > 1:
                 ops_result = self.logic.disj(visited)
                 c_bool = torch.logical_or(visited_bool[:, 0], visited_bool[:, 1]).unsqueeze(1)
                 # print('or', c_bool.shape)
-            else:
-                raise Exception("Node class not known." % node.__type__)
 
             c_bool = c_bool.float()
             # preds = self.scorer(torch.sigmoid(ops_result)).squeeze()
@@ -121,7 +117,9 @@ class R2NPropositionalLayer(nn.Module):
             return ops_result, c_bool
 
     def predict_proba(self, x):
-        return x.matmul(self.logic.current_truth).squeeze()
+        # t = x.matmul(self.logic.current_truth).squeeze()
+        # f = x.matmul(self.logic.current_false).squeeze()
+        return torch.clamp(x.matmul(self.logic.current_truth), 0, 1).squeeze()
 
 
 if __name__ == '__main__':

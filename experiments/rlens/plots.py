@@ -8,8 +8,8 @@ import os
 
 def main():
     ood = False
-    ood = True
-    results = pd.read_csv(f'./results/reasoner_results.csv', index_col=None)
+    # ood = True
+    results = pd.read_csv(f'./results-2/reasoner_results.csv', index_col=None)
     res_dir = f'./results/'
     if ood:
         results = pd.read_csv(f'./results/ood/reasoner_results.csv', index_col=None)
@@ -18,7 +18,7 @@ def main():
     os.makedirs(res_dir, exist_ok=True)
     out_file = os.path.join(res_dir, 'result_accuracy.png')
 
-    results['model'] = results['model'].str.replace('DCR', 'DCR (ours)')
+    results['model'] = results['model'].str.replace('DCR+', 'DCR+ (ours)')
 
     sns.set_style('whitegrid')
     sns.despine()
