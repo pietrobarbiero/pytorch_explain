@@ -4,8 +4,8 @@ import torch
 from torch import Tensor
 from torch import nn
 
-from torch_explain.logic.semantics import ProductTNorm
-from torch_explain.logic.vector_logic import ExpressionTree, Concept, Not, And, Or, serialize_len_rules
+from ..logic.semantics import ProductTNorm, Logic
+from ..logic.parser import ExpressionTree, Concept, Not, And, Or, serialize_rules
 from .concepts import Conceptizator
 
 
@@ -65,61 +65,38 @@ class EntropyLinear(nn.Module):
         )
 
 
-class R2NPropositionalLayer(nn.Module):
-    def __init__(self, logic=ProductTNorm(), scorer=None, loss_form=None):
-        super(R2NPropositionalLayer, self).__init__()
-        self.logic = logic
-        self.loss_form = loss_form
+class PropositionalLayer(nn.Module):
+    def __init__(self):
+        super(PropositionalLayer, self).__init__()
 
-    def forward(self, x, concepts_names, rules, c_bool=None):
-        self.logic.update()
-        self.loss_ = 0
-        self.tree_ = serialize_len_rules(concepts=concepts_names, rules=rules)
+    def forward(self, x, expression_tree: ExpressionTree, logic: Logic):
+        # logic.update()    # TODO: check if we really need to train logic
         tasks = []
-        tasks_bool = []
-        for r in self.tree_.roots:
-            t_emb, t_bool = self._visit(r, x, c_bool)
-            tasks.append(t_emb)
-            tasks_bool.append(t_bool)
-        return torch.concat(tasks, dim=1), torch.concat(tasks_bool, dim=1)
+        for r in expression_tree.roots:
+            tasks.append(self._visit(r, x, logic))
+        return torch.concat(tasks, dim=1)
 
-    def _visit(self, node, x, c_bool):
-
+    def _visit(self, node, x, logic):
+        # for each node in the expression tree either:
+        # - return a concept (leaf) or
+        # - perform logic composition of child nodes
         if isinstance(node, Concept):
-            return x[:, node.id:node.id + 1], c_bool[:, node.id:node.id + 1]
+            return x[:, node.id:node.id + 1]
         else:
             visited = []
-            visited_bool = []
             for c in node.children:
-                x_viz, c_viz = self._visit(c, x, c_bool)
+                x_viz = self._visit(c, x, logic)
                 visited.append(x_viz)
-                visited_bool.append(c_viz)
             visited = torch.concat(visited, dim=1)
-            visited_bool = torch.concat(visited_bool, dim=1)
-            ops_result, c_bool = visited, visited_bool
             if isinstance(node, Not):
-                ops_result = self.logic.neg(visited)
-                c_bool = torch.logical_not(visited_bool)
-                # print('not', c_bool.shape)
+                ops_result = logic.neg(visited)
             elif isinstance(node, And) and visited.shape[1] > 1:
-                ops_result = self.logic.conj(visited)
-                c_bool = torch.logical_and(visited_bool[:, 0], visited_bool[:, 1]).unsqueeze(1)
-                # print('and', c_bool.shape)
+                ops_result = logic.conj(visited)
             elif isinstance(node, Or) and visited.shape[1] > 1:
-                ops_result = self.logic.disj(visited)
-                c_bool = torch.logical_or(visited_bool[:, 0], visited_bool[:, 1]).unsqueeze(1)
-                # print('or', c_bool.shape)
-
-            c_bool = c_bool.float()
-            # preds = self.scorer(torch.sigmoid(ops_result)).squeeze()
-            # self.loss_ += self.loss_form(preds, c_bool.squeeze())
-
-            return ops_result, c_bool
-
-    def predict_proba(self, x):
-        # t = x.matmul(self.logic.current_truth).squeeze()
-        # f = x.matmul(self.logic.current_false).squeeze()
-        return torch.clamp(x.matmul(self.logic.current_truth), 0, 1).squeeze()
+                ops_result = logic.disj(visited)
+            else:
+                raise NotImplementedError
+            return ops_result
 
 
 if __name__ == '__main__':

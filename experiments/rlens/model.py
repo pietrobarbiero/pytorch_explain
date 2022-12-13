@@ -2,197 +2,135 @@ import numpy as np
 import torch
 from torch import nn
 import torch_explain as te
-from torch_explain.nn.logic import R2NPropositionalLayer
+from torch_explain.logic.parser import serialize_rules
+from torch_explain.logic.semantics import VectorLogic
+from torch_explain.nn.logic import PropositionalLayer
 from torch_explain.logic.nn import entropy
+import pytorch_lightning as pl
 from torch.nn import functional as F
 
 
-def get_rule_learner(in_concepts, out_concepts, temperature=10):
-    return nn.Sequential(
-        te.nn.EntropyLinear(in_concepts, 50, n_classes=out_concepts, temperature=temperature),
-        torch.nn.LeakyReLU(),
-        torch.nn.Linear(50, 20),
-        torch.nn.LeakyReLU(),
-        torch.nn.Linear(20, 1),
-    )
-
-
-def get_reasoner(logic, scorer, loss_form):
-    return R2NPropositionalLayer(logic, scorer, loss_form)
-
-
-# class Scorer(nn.Module):
-#     def __init__(self, emb_size):
-#         super(Scorer, self).__init__()
-#         self.w = torch.nn.Parameter(torch.randn(emb_size), requires_grad=True)
-#
-#     def forward(self, x):
-#         # xt = torch.sigmoid(x)
-#         xt = x.reshape(x.shape[0]*x.shape[1], -1)
-#         xt = xt.matmul(self.w)
-#         xt = xt.reshape(x.shape[0], x.shape[1])
-#         return torch.sigmoid(xt) #torch.log(xt) - 1
-
-
-def get_scorer(emb_size):
-    return nn.Sequential(
+class Scorer(torch.nn.Module):
+    def __init__(self, emb_size):
+        super().__init__()
+        self.model = nn.Sequential(
             torch.nn.Linear(emb_size, emb_size),
             torch.nn.LeakyReLU(),
             torch.nn.Linear(emb_size, 1),
             torch.nn.Sigmoid()
-    )
-    # return nn.Sequential(Scorer(emb_size))
-
-
-class DeepConceptReasoner(torch.nn.Module):
-    def __init__(self, rule_learner, reasoner, scorer, concept_names, class_names, verbose: bool = False):
-        super().__init__()
-        self.rule_learner = rule_learner
-        self.reasoner = reasoner
-        self.scorer = scorer
-        self.concept_names = concept_names
-        self.class_names = class_names
-        self.verbose = verbose
-        self.lin = torch.nn.Sequential(
-            torch.nn.Linear(32, 32),
-            torch.nn.LeakyReLU(),
-            torch.nn.Linear(32, 32),
-            torch.nn.Sigmoid(),
         )
 
-    def learn_rules(self, x, y):
+    def forward(self, x):
+        return self.model.forward(x)
+
+
+class RuleLearner(torch.nn.Module):
+    def __init__(self, in_concepts, out_concepts, temperature=10):
+        super().__init__()
+        self.model = nn.Sequential(
+            te.nn.EntropyLinear(in_concepts, 50, n_classes=out_concepts, temperature=temperature),
+            torch.nn.LeakyReLU(),
+            torch.nn.Linear(50, 20),
+            torch.nn.LeakyReLU(),
+            torch.nn.Linear(20, 1),
+            torch.nn.Sigmoid(), # TODO: remove and work with logits?
+        )
+
+    def forward(self, x):
+        return self.model.forward(x).squeeze(-1)
+
+    def learn_rules(self, x, y, concepts_names, class_names):
         train_mask = torch.LongTensor(np.arange(x.shape[0]))
         test_mask = torch.LongTensor(train_mask)
-        self.explanations_, _ = entropy.explain_classes(self.rule_learner, x, y, train_mask, test_mask,
-                                                        c_threshold=0.5, y_threshold=0., verbose=True,
-                                                        concept_names=self.concept_names, class_names=self.class_names,
+        self.explanations_, _ = entropy.explain_classes(self.model.cpu(), x.cpu(), y.cpu(), train_mask.cpu(), test_mask.cpu(),
+                                                        c_threshold=0.5, y_threshold=0.5, verbose=False,
+                                                        concept_names=concepts_names, class_names=class_names,
                                                         material=True, good_bad_terms=False, max_accuracy=True)
-        return [{'explanation': v['explanation'], 'name': v['name']} for _, v in self.explanations_.items()]
+        self.model.cuda()
+        explanations = [{'explanation': v['explanation'], 'name': v['name']} for _, v in self.explanations_.items()]
+        return serialize_rules(concepts=concepts_names, rules=explanations) # FIXME: save learnt rules to disk!
 
-    def forward(self, x, predictor: str, c=None):
-        y_bool, y_pred_refined = None, None
-        if predictor == 'learner':
-            y_pred = self.rule_learner(x).squeeze(-1)
-        elif predictor == 'ProbLog':
-            raise NotImplementedError
-        elif predictor == 'reasoner':
-            y_emb, y_bool = self.reasoner(x, self.concept_names, self.learnt_rules_, c)
-            y_pred = self.reasoner.predict_proba(y_emb).squeeze(-1)
-            sc = self.lin(y_emb)
+
+class DeepConceptReasoner(pl.LightningModule):
+    def __init__(self, in_concepts, out_concepts, emb_size, concept_names, class_names,
+                 learning_rate, learner_epochs, loss_form, mode='learner', temperature=10, verbose: bool = False):
+        super().__init__()
+        self.scorer = Scorer(emb_size)
+        self.rule_learner = RuleLearner(in_concepts, out_concepts, temperature)
+        self.logic = VectorLogic(emb_size)
+        self.reasoner = PropositionalLayer()
+        self.concept_names = concept_names
+        self.class_names = class_names
+        self.learner_epochs = learner_epochs
+        self.learning_rate = learning_rate
+        self.loss_form = loss_form
+        self.mode = mode
+        self.verbose = verbose
+        self.learner_preds = []
+        self.logic_preds = []
+        self.neural_preds = []
+        self.concept_preds = []
+        self.task_labels = []
+        self.concept_labels = []
+
+    def forward(self, x):
+        if self.mode == 'learner':
+            x_pred = x
+            y_pred_logic = y_pred_neural = y_emb = self.rule_learner(x)
+        elif self.mode == 'reasoner':
+            sc = self.scorer(x)
             nc = 1 - sc
-            y_emb_refined = sc * self.reasoner.logic.current_truth.T + nc * self.reasoner.logic.current_false.T
-            y_pred_refined = self.reasoner.predict_proba(y_emb_refined)
+            x_wmc = sc * self.logic.current_truth.T + nc * self.logic.current_false.T
+            x_pred = self.logic.predict_proba(x_wmc)
+            y_emb = self.reasoner(x_wmc, self.learnt_rules_, self.logic)
+            y_pred_logic = self.logic.predict_proba(y_emb)
+            y_pred_neural = self.scorer(y_emb).squeeze(-1) # TODO: change it and make it private
         else:
             raise NotImplementedError
 
-        return y_pred, y_bool, y_pred_refined
+        return y_pred_logic, y_pred_neural, y_emb, x_pred
 
-    def fit(self, x_sem, x_emb, c, y, lr, epochs, use_learnt_rules=True):
-        y_pred_reasoner, y_pred_learner, y_pred_refined = None, None, None
+    def training_step(self, batch, batch_idx):
+        x_sem, x_emb, c, y = batch
+        if self.mode == 'learner':
+            y_pred_logic, _, _, _ = self.forward(x_sem)
+            loss = self.loss_form(y_pred_logic, y)
+            self.log("train_loss", loss)
+        elif self.mode == 'reasoner':
+            y_pred_logic, y_pred_neural, _, x_pred = self.forward(x_emb)
+            logic_loss = self.loss_form(y_pred_logic, y)
+            neural_loss = self.loss_form(y_pred_neural, y)
+            concept_loss = self.loss_form(x_pred, c)
+            loss = .1 * logic_loss + .1 * neural_loss + concept_loss
+            self.log("train_loss", loss)
+            self.log("logic_loss", logic_loss)
+            self.log("neural_loss", neural_loss)
+            self.log("concept_loss", concept_loss)
+        else:
+            raise NotImplementedError
 
-        # get learnt rules
-        if use_learnt_rules:
-            # train rule learner
-            print('\nRule learning...')
-            self.rule_optimizer = torch.optim.AdamW(self.rule_learner.parameters(), lr=lr)
-            self.rule_learner.train()
-            loss_form = torch.nn.BCEWithLogitsLoss()
-            for epoch in range(epochs):
-                self.rule_optimizer.zero_grad()
-                y_pred_learner, _, _ = self.forward(x_sem, 'learner')
-                loss = loss_form(y_pred_learner, y)
-                loss.backward()
-                self.rule_optimizer.step()
+        if self.current_epoch > self.learner_epochs:
+            self.mode = 'reasoner'
+            self.learnt_rules_ = self.rule_learner.learn_rules(x_sem, y, self.concept_names, self.class_names)
+            self.cuda()
 
-                # compute accuracy
-                if epoch % 100 == 0 and self.verbose:
-                    train_accuracy = (y_pred_learner > 0.).eq(y).sum().item() / (y.size(0) * y.size(1))
-                    print(f'Epoch {epoch}: loss {loss:.4f} train accuracy: {train_accuracy:.4f}')
+        return loss
 
-            self.learnt_rules_ = self.learn_rules(x_sem, y)
+    def test_step(self, batch, batch_idx):
+        x_sem, x_emb, c, y = batch
+        self.mode = 'learner'
+        y_pred_learner, _, _, _ = self.forward(x_sem)
+        self.mode = 'reasoner'
+        y_pred_logic, y_pred_neural, _, x_pred = self.forward(x_emb)
+        self.learner_preds.append(y_pred_learner)
+        self.logic_preds.append(y_pred_logic)
+        self.neural_preds.append(y_pred_neural)
+        self.concept_preds.append(x_pred)
+        self.task_labels.append(y)
+        self.concept_labels.append(c)
+        return
 
-        # train reasoner
-        print('\nReasoning...')
-        params = list(self.lin.parameters()) + list(self.scorer.parameters())
-        # self.reasoner_optimizer = torch.optim.AdamW(self.reasoner.logic.parameters(), lr=lr)
-        self.reasoner_optimizer = torch.optim.AdamW(params, lr=lr)
-        # self.reasoner.train()
-        self.lin.train()
-        self.scorer.train()
-        loss_form = torch.nn.BCELoss()
-        for epoch in range(epochs):
-            self.reasoner_optimizer.zero_grad()
-
-            # a = self.scorer(x_emb)
-            # b = 1 - a
-            #
-            # truth = self.lin(x_emb.reshape(x_emb.shape[0], -1))
-            # false = self.reasoner.logic.false(truth)
-            #
-            # x_wmc = a * truth.unsqueeze(1) + b * false.unsqueeze(1)
-            # self.reasoner.logic.update(truth, false)
-
-            sc = self.scorer(x_emb)
-            nc = 1 - sc
-            # sc = x_emb1.matmul(self.reasoner.logic.current_truth)**2
-            # nc = x_emb1.matmul(self.reasoner.logic.current_false)**2
-            x_wmc = sc * self.reasoner.logic.current_truth.T + nc * self.reasoner.logic.current_false.T
-            # sc1 = x_wmc.matmul(self.reasoner.logic.current_truth)
-            # nc1 = x_wmc.matmul(self.reasoner.logic.current_false)
-
-            c_pred_reasoner = self.reasoner.predict_proba(x_wmc)
-            y_pred_reasoner, y_pred_bool, y_pred_refined = self.forward(x_wmc, 'reasoner', (c > 0.5).float())
-            loss1 = loss_form(y_pred_reasoner, y)
-            loss3 = loss_form(y_pred_refined, y)
-            loss2 = loss_form(c_pred_reasoner, (c > 0.5).float())
-            loss = 0.1 * loss1 + 0.1 * loss3 + loss2 #+ self.reasoner.loss_
-            loss.backward(retain_graph=True)
-            self.reasoner_optimizer.step()
-
-            # compute accuracy
-            if epoch % 100 == 0 and self.verbose:
-                train_accuracy = (y_pred_reasoner > 0.5).eq(y).sum().item() / (y.size(0) * y.size(1))
-                refined_accuracy = (y_pred_refined > 0.5).eq(y).sum().item() / (y.size(0) * y.size(1))
-                bool_accuracy = (y_pred_bool > 0.5).eq(y).sum().item() / (y.size(0) * y.size(1))
-                c_accuracy = (c_pred_reasoner > 0.5).eq(c > 0.5).sum().item() / (c.size(0) * c.size(1))
-                print(f'Epoch {epoch}: loss {loss:.4f} train accuracy: {train_accuracy:.4f} refined accuracy: {refined_accuracy:.4f} concept accuracy: {c_accuracy:.4f} (train bool: {bool_accuracy:.4f})')
-
-        return y_pred_reasoner, y_pred_learner, y_pred_refined
-
-    def predict(self, x_sem, x_emb):
-        # inference with rule learner
-        print('\nRule learner inference...')
-        self.rule_learner.eval()
-        y_pred_learner, _, _ = self.forward(x_sem, 'learner')
-
-        # update learnt rules?
-        # OOD tasks?
-        # self.learnt_rules_ = self.update_rules()
-
-        # inference with reasoner
-        print('Reasoning inference...')
-        # self.reasoner.eval()
-        # self.scorer.eval()
-        self.lin.train()
-        self.scorer.train()
-
-        # x_emb1 = self.scorer(x_emb)
-
-        # sc = x_emb1.matmul(self.reasoner.logic.current_truth) ** 2
-        # nc = x_emb1.matmul(self.reasoner.logic.current_false) ** 2
-        # sumc = sc + nc
-        # x_wmc = (sc * self.reasoner.logic.current_truth.T +
-        #          nc * self.reasoner.logic.current_false.T) / sumc
-
-        sc = self.scorer(x_emb)
-        nc = 1 - sc
-        # sc = x_emb1.matmul(self.reasoner.logic.current_truth)**2
-        # nc = x_emb1.matmul(self.reasoner.logic.current_false)**2
-        x_wmc = sc * self.reasoner.logic.current_truth.T + nc * self.reasoner.logic.current_false.T
-        # sc1 = x_wmc.matmul(self.reasoner.logic.current_truth)
-        # nc1 = x_wmc.matmul(self.reasoner.logic.current_false)
-
-        c_pred_reasoner = self.reasoner.predict_proba(x_wmc)
-        y_pred_reasoner, y_pred_bool, y_pred_refined = self.forward(x_wmc, 'reasoner', (x_sem > 0.5).float())
-
-        return y_pred_reasoner, y_pred_learner, c_pred_reasoner, y_pred_bool, y_pred_refined
+    def configure_optimizers(self):
+        optimizer = torch.optim.AdamW(self.parameters(), lr=self.learning_rate)
+        # lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1)    # TODO: consider whether we need this or not
+        return optimizer
