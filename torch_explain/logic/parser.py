@@ -1,4 +1,4 @@
-def serialize_len_rules(concepts, rules):
+def serialize_rules(concepts, rules):
     concept_name_to_object = {}
     for i, c in enumerate(concepts):
         concept_name_to_object[c] = Concept(name=c, id=i)
