@@ -45,12 +45,13 @@ def load_data(number_digits):
 
 def main():
 
-    epochs = 500
+    epochs = 10
     learning_rate = 0.001
     batch_size = 32
     limit_batches = 1.0
-    emb_size = 100
+    emb_size = 20
     number_digits = 2
+    gpu = False
 
 
     results_dir = f"./results/"
@@ -69,7 +70,7 @@ def main():
 
     model = DeepConceptReasoner(emb_size=emb_size, num_digits = number_digits,
                                 concept_names=concept_names, explanations=explanations,
-                                learning_rate=learning_rate, verbose=True)
+                                learning_rate=learning_rate, verbose=True, gpu = gpu)
 
 
     # if not os.path.exists(model_path):
@@ -87,13 +88,13 @@ def main():
 
     # trainer.test(model, dataloaders=test_dl)
 
-    accuracy_learner = accuracy_score(model.task_labels[0].cpu().detach() > 0.5, model.learner_preds[0].cpu().detach() > 0.5)
-    accuracy_logic = accuracy_score(model.task_labels[0].cpu().detach() > 0.5, model.logic_preds[0].cpu().detach() > 0.5)
-    accuracy_neural = accuracy_score(model.task_labels[0].cpu().detach() > 0.5, model.neural_preds[0].cpu().detach() > 0.5)
-    accuracy_concept = accuracy_score(model.concept_labels[0].cpu().detach(), model.concept_preds[0].cpu().detach() > 0.5)
-
-    results = pd.DataFrame([[accuracy_learner, accuracy_logic, accuracy_neural, accuracy_concept]], columns=['learner', 'logic', 'neural', 'concept'])
-    results.to_csv(os.path.join(results_dir, 'accuracy.csv'))
+    # accuracy_learner = accuracy_score(model.task_labels[0].cpu().detach() > 0.5, model.learner_preds[0].cpu().detach() > 0.5)
+    # accuracy_logic = accuracy_score(model.task_labels[0].cpu().detach() > 0.5, model.logic_preds[0].cpu().detach() > 0.5)
+    # accuracy_neural = accuracy_score(model.task_labels[0].cpu().detach() > 0.5, model.neural_preds[0].cpu().detach() > 0.5)
+    # accuracy_concept = accuracy_score(model.concept_labels[0].cpu().detach(), model.concept_preds[0].cpu().detach() > 0.5)
+    #
+    # results = pd.DataFrame([[accuracy_learner, accuracy_logic, accuracy_neural, accuracy_concept]], columns=['learner', 'logic', 'neural', 'concept'])
+    # results.to_csv(os.path.join(results_dir, 'accuracy.csv'))
 
 
 if __name__ == '__main__':

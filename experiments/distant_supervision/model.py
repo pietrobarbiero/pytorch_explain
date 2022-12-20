@@ -117,7 +117,7 @@ class AdditionAdHocReasoner(nn.Module):
 
 
 class DeepConceptReasoner(pl.LightningModule):
-    def __init__(self, emb_size, num_digits,concept_names, explanations, learning_rate,  temperature=10, verbose: bool = False):
+    def __init__(self, emb_size, num_digits,concept_names, explanations, learning_rate,  temperature=10, verbose: bool = False, gpu=True):
         super().__init__()
         self.embedder = MNISTEncoder()
         self.classifier = MNISTClassifier()
@@ -125,7 +125,7 @@ class DeepConceptReasoner(pl.LightningModule):
         self.logic = ProductTNorm()
         self.emb_size = emb_size
 
-        self.vector_logic = VectorLogic(self.emb_size)
+        self.vector_logic = VectorLogic(self.emb_size, gpu=gpu)
         self.scorer = Scorer(self.emb_size)
 
         # explanations = [{'explanation': v['explanation'], 'name': v['name']} for _, v in explanations.items()]

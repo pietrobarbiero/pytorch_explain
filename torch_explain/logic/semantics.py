@@ -86,23 +86,24 @@ class GodelTNorm(Logic):
 
 
 class VectorLogic(Logic, torch.nn.Module):
-    def __init__(self, emb_size, cuda = True):
+    def __init__(self, emb_size, gpu = True):
         super(VectorLogic, self).__init__()
+        self.gpu = gpu
         self.emb_size = emb_size
         self._truth = torch.nn.Parameter(torch.randn(emb_size, 1), requires_grad=False)  # TODO: check if we really need to train logic
         self._false = torch.randn(self.truth.shape)
         torch.nn.init.normal_(self.truth)
         self._check_axioms()
-        self.cuda = cuda
+
 
     def _check_axioms(self):
         self.update()
-        if self.cuda:
+        if self.gpu:
             truth = self.truth.cuda()
             false = self.false.cuda()
         else:
-            truth = self.truth.cuda()
-            false = self.false.cuda()
+            truth = self.truth
+            false = self.false
         eps = 1e-5
         assert torch.matmul(truth.T, false).squeeze() < eps # orthonormality
         assert torch.all(self.negation.matmul(self.negation.matmul(truth)) - truth < eps) # involution
@@ -150,7 +151,7 @@ class VectorLogic(Logic, torch.nn.Module):
         self.negation = false.matmul(truth.T) + truth.matmul(false.T)
         self.conjunction = truth.matmul(tt) + false.matmul(tf) + false.matmul(ft) + false.matmul(ff)
         self.disjunction = truth.matmul(tt) + truth.matmul(tf) + truth.matmul(ft) + false.matmul(ff)
-        if self.cuda:
+        if self.gpu:
             self.current_truth = self.current_truth.cuda()
             self.current_false = self.current_false.cuda()
             self.negation = self.negation.cuda()
