@@ -90,9 +90,9 @@ class PropositionalLayer(nn.Module):
             visited = torch.concat(visited, dim=1)
             if isinstance(node, Not):
                 ops_result = logic.neg(visited)
-            elif isinstance(node, And) and visited.shape[1] > 1:
+            elif isinstance(node, And) and visited.shape[1] > 0:
                 ops_result = logic.conj(visited)
-            elif isinstance(node, Or) and visited.shape[1] > 1:
+            elif isinstance(node, Or) and visited.shape[1] > 0:
                 ops_result = logic.disj(visited)
             else:
                 raise NotImplementedError
