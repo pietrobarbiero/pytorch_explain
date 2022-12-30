@@ -16,6 +16,12 @@ class Logic:
     def disj(self, a, dim=1):
         raise NotImplementedError
 
+    def conj_pair(self, a, b):
+        raise NotImplementedError
+
+    def disj_pair(self, a, b):
+        raise NotImplementedError
+
     @abc.abstractmethod
     def neg(self, a):
         raise NotImplementedError
@@ -34,6 +40,9 @@ class ProductTNorm(Logic):
 
     def disj(self, a, dim=1):
         return 1 - torch.prod(1 - a, dim=dim, keepdim=True)
+
+    def disj_pair(self, a, b):
+        return a + b - a * b
 
     def neg(self, a):
         return 1 - a
