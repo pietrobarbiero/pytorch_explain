@@ -7,6 +7,7 @@ import torch
 from sklearn.metrics import accuracy_score
 from torch.nn import BCELoss
 from torch.nn.functional import one_hot
+from collections import Counter
 
 from experiments.rlens.model import DeepConceptReasoner
 from torch_explain.logic.semantics import ProductTNorm, VectorLogic
@@ -20,6 +21,8 @@ import os
 
 from pytorch_lightning.loggers import TensorBoardLogger
 from torch.utils.data import DataLoader
+
+from torch_explain.nn.logic import DCR
 
 # torch.autograd.set_detect_anomaly(True)
 os.environ["CUDA_VISIBLE_DEVICES"] = ""
@@ -54,43 +57,20 @@ def load_data(dataset, fold, train_epochs):
     return train_dataset, test_dataset, in_concepts, out_concepts, emb_size, concept_names, class_names
 
 
-class DCR(torch.nn.Module):
-    def __init__(self, emb_size, n_classes):
-        super().__init__()
-        self.emb_size = emb_size
-        self.n_classes = n_classes
-        self.w_key = torch.nn.Parameter(torch.empty((emb_size, emb_size)))
-        self.w_query = torch.nn.Parameter(torch.empty((emb_size, n_classes)))
-        self.reset_parameters()
-
-    def reset_parameters(self) -> None:
-        # Setting a=sqrt(5) in kaiming_uniform is the same as initializing with
-        # uniform(-1/sqrt(in_features), 1/sqrt(in_features)). For details, see
-        # https://github.com/pytorch/pytorch/issues/57109
-        torch.nn.init.kaiming_uniform_(self.w_key, a=math.sqrt(5))
-        torch.nn.init.kaiming_uniform_(self.w_query, a=math.sqrt(5))
-
-    def forward(self, x, c):
-        keys = x @ self.w_key
-        attn_scores = keys @ self.w_query
-        attn_scores_softmax = torch.sigmoid(attn_scores)  # or softmax
-
-        neg_scores = 1 - attn_scores_softmax
-        c2 = c.unsqueeze(-1).repeat(1, 1, self.n_classes)
-        c_or = 1 - neg_scores * c2
-        return torch.softmax(torch.prod(c_or, dim=1, keepdim=True).squeeze(), dim=1)
-
-
 def main():
-    datasets = ['xor', 'trig', 'vec']
-    # datasets = ['vec']
+    # datasets = ['xor', 'trig', 'vec']
+    datasets = ['xor']
     folds = [i+1 for i in range(5)]
     train_epochs = 500
     epochs = 500
     learning_rate = 0.008
     batch_size = 500
     limit_batches = 1.0
+    n_hidden = 30
+    temperature = 10000
     results = []
+    local_explanations_df = pd.DataFrame()
+    global_explanations_df = pd.DataFrame()
     cols = ['rules', 'accuracy', 'fold', 'model', 'dataset']
     for dataset in datasets:
         for fold in folds:
@@ -104,12 +84,14 @@ def main():
 
             c_emb = train_data.tensors[1]
             c_scores = train_data.tensors[0]
+            # c_emb = torch.concat((c_emb, torch.randn(c_emb.shape)), dim=1)
+            # c_scores = torch.concat((c_scores, torch.zeros_like(c_scores)), dim=1)
             y = train_data.tensors[3]
             n_classes = len(class_names)
             # n_classes = 3
             logic = ProductTNorm()
 
-            model = DCR(emb_size, n_classes)
+            model = DCR(c_scores.shape[1], n_hidden, emb_size, n_classes, logic, temperature)
             optimizer = torch.optim.AdamW(model.parameters(), lr=0.001)
             loss_form = torch.nn.BCEWithLogitsLoss()
             model.train()
@@ -117,6 +99,7 @@ def main():
                 # train step
                 optimizer.zero_grad()
                 y_pred = model(c_emb, c_scores)
+                y_pred = torch.softmax(y_pred, dim=1)
                 loss = loss_form(y_pred, y)
                 loss.backward()
                 optimizer.step()
@@ -130,12 +113,26 @@ def main():
             c_scores = test_data.tensors[0]
             y = test_data.tensors[3]
             y_pred = model(c_emb, c_scores)
+            y_pred = torch.softmax(y_pred, dim=1)
             test_accuracy = accuracy_score(y[:, 1], y_pred.argmax(dim=-1).detach())
             print(f'Test accuracy: {test_accuracy:.4f}')
 
+            local_explanations = model.explain(c_emb, c_scores, mode='local')
+            local_explanations = pd.DataFrame(local_explanations)
+            local_explanations['fold'] = fold
+            local_explanations['dataset'] = dataset
+            local_explanations_df = pd.concat([local_explanations_df, local_explanations], axis=0)
+            local_explanations_df.to_csv(os.path.join(results_dir, 'local_explanations.csv'))
+
+            global_explanations = model.explain(c_emb, c_scores, mode='global')
+            global_explanations = pd.DataFrame(global_explanations)
+            global_explanations['fold'] = fold
+            global_explanations['dataset'] = dataset
+            global_explanations_df = pd.concat([global_explanations_df, global_explanations], axis=0)
+            global_explanations_df.to_csv(os.path.join(results_dir, 'global_explanations.csv'))
+
             results.append(['', test_accuracy, fold, 'DCR (ours)', dataset])
             pd.DataFrame(results, columns=cols).to_csv(os.path.join(results_dir, 'accuracy.csv'))
-
 
 
 if __name__ == '__main__':
