@@ -1,6 +1,6 @@
+import copy
 import math
 from collections import Counter
-
 import torch
 from torch import Tensor
 from torch import nn
@@ -9,23 +9,28 @@ from ..logic.semantics import Logic
 from ..logic.parser import ExpressionTree, Concept, Not, And, Or
 from .concepts import Conceptizator
 
+EPS = 1e-3
+
+
+def softmaxnorm(values, temperature):
+    softmax_scores = torch.exp(values / temperature) / torch.sum(torch.exp(values / temperature), dim=1, keepdim=True)
+    return softmax_scores / softmax_scores.max(dim=1)[0].unsqueeze(1)
+
 
 class DCR(torch.nn.Module):
-    def __init__(self, in_features, n_hidden, emb_size, n_classes, logic: Logic, temperature=1.):
+    def __init__(self, in_features, emb_size, n_classes, logic: Logic,
+                 temperature_complexity: float = 1., temperature_sharp: float = 1.):
         super().__init__()
         self.in_features = in_features
         self.emb_size = emb_size
         self.n_classes = n_classes
         self.logic = logic
-        self.temperature = temperature
-        # self.w_value = torch.nn.Parameter(torch.empty((in_features, in_features)))
-        self.w_value = torch.nn.Sequential(
-            torch.nn.Linear(in_features, n_hidden),
-            torch.nn.LeakyReLU(),
-            torch.nn.Linear(n_hidden, in_features),
-        )
-        self.w_key = torch.nn.Parameter(torch.empty((emb_size, emb_size)))
-        self.w_query = torch.nn.Parameter(torch.empty((emb_size, n_classes)))
+        self.temperature_sharp = temperature_sharp
+        self.temperature_complexity = temperature_complexity
+        self.w_key_logic = torch.nn.Parameter(torch.empty((emb_size, emb_size)))
+        self.w_query_logic = torch.nn.Parameter(torch.empty((emb_size, n_classes)))
+        self.w_key_filter = torch.nn.Parameter(torch.empty((emb_size, emb_size)))
+        self.w_query_filter = torch.nn.Parameter(torch.empty((emb_size, n_classes)))
         self.reset_parameters()
 
     def reset_parameters(self) -> None:
@@ -33,50 +38,61 @@ class DCR(torch.nn.Module):
         # uniform(-1/sqrt(in_features), 1/sqrt(in_features)). For details, see
         # https://github.com/pytorch/pytorch/issues/57109
         # torch.nn.init.kaiming_uniform_(self.w_value, a=math.sqrt(5))
-        torch.nn.init.kaiming_uniform_(self.w_key, a=math.sqrt(5))
-        torch.nn.init.kaiming_uniform_(self.w_query, a=math.sqrt(5))
+        torch.nn.init.kaiming_uniform_(self.w_key_logic, a=math.sqrt(5))
+        torch.nn.init.kaiming_uniform_(self.w_query_logic, a=math.sqrt(5))
+        torch.nn.init.kaiming_uniform_(self.w_key_filter, a=math.sqrt(5))
+        torch.nn.init.kaiming_uniform_(self.w_query_filter, a=math.sqrt(5))
 
-    def forward(self, x, c, return_attn=False):
-        # values = c @ self.w_value
-        values = self.w_value(c)
-        values = values.unsqueeze(-1).repeat(1, 1, self.n_classes)
+    def forward(self, x, c, return_attn=False, logic_attn=None, filter_attn=None):
+        values = c.unsqueeze(-1).repeat(1, 1, self.n_classes)
+        # x = c.unsqueeze(-1).repeat(1, 1, self.emb_size)
 
-        # compute attention scores
-        keys = x @ self.w_key
-        attn = keys @ self.w_query
-        # attn_scores_norm = torch.sigmoid(attn)  # or softmax
-        attn_scores = torch.exp(attn / self.temperature) / torch.sum(torch.exp(attn / self.temperature), dim=1, keepdim=True)
-        attn_scores_norm = attn_scores / attn_scores.max(dim=1)[0].unsqueeze(1)
-        attn_mask = attn_scores_norm > 0.5
+        if logic_attn is None:
+            # compute attention scores to build logic sentence
+            # each attention score will represent whether the concept should be active or not in the logic sentence
+            logic_keys = x @ self.w_key_logic   # TODO: might be independent from input x (but requires OR)
+            logic_attn = torch.sigmoid(logic_keys @ self.w_query_logic)
+
+        # attention scores need to be aligned with predicted concept truth values (attn <-> values)
+        # (not A or V) and (A or not V) <-> (A <-> V)
+        logic_terms = self.logic.iff_pair(logic_attn, values)
+        # control sharpness of truth values
+        # sharper values -> lower leakage, lower accuracy
+        # less sharp values -> higher leakage, higher accuracy
+        logic_terms = torch.sigmoid(self.temperature_sharp * (logic_terms - 0.5))
+
+        if filter_attn is None:
+            # compute attention scores to identify only relevant concepts for each class
+            filter_keys = x @ self.w_key_filter   # TODO: might be independent from input x (but requires OR)
+            filter_attn = softmaxnorm(filter_keys @ self.w_query_filter, self.temperature_complexity)
 
         # filter values
-        neg_scores = self.logic.neg(attn_scores_norm)
-        filtered_values = self.logic.disj_pair(values, neg_scores)
+        # filtered -> neg or
+        filtered_values = self.logic.disj_pair(logic_terms, self.logic.neg(filter_attn))
 
         # generate minterm
-        preds = self.logic.conj(filtered_values, dim=1).squeeze()
+        preds = self.logic.conj(filtered_values, dim=1).softmax(dim=-1).squeeze()
         if return_attn:
-            return preds, attn_mask
+            return preds, logic_attn > 0.5, filter_attn > 0.5   # FIXME: handle None cases
         else:
             return preds
 
     def explain(self, x, c, mode):
         assert mode in ['local', 'global']
 
-        y_preds, attn_mask = self.forward(x, c, return_attn=True)
+        y_preds, logic_attn_mask, filter_attn_mask = self.forward(x, c, return_attn=True)
 
         # extract local explanations
         predictions = y_preds.argmax(dim=-1).detach()
         explanations = []
         all_class_explanations = {c: [] for c in range(self.n_classes)}
-        for concept_scores, attn, prediction in zip(c, attn_mask, predictions):
+        for filter_attn, logic_attn, prediction in zip(filter_attn_mask, logic_attn_mask, predictions):
             # select mask for predicted class only
             # and generate minterm
-            attn_filtered = attn[:, prediction]
             minterm = []
-            for idx, (concept_score, attn_score) in enumerate(zip(concept_scores, attn_filtered)):
+            for idx, (concept_score, attn_score) in enumerate(zip(logic_attn[:, prediction], filter_attn[:, prediction])):
                 if attn_score:
-                    if concept_score > 0.5:
+                    if concept_score:
                         minterm.append(f'f{idx}')
                     else:
                         minterm.append(f'~f{idx}')
@@ -101,6 +117,36 @@ class DCR(torch.nn.Module):
                     })
 
         return explanations
+
+    def counterfact(self, x, c):
+        # find original predictions and assume we just want to flip them all
+        old_preds, logic_attn_mask, filter_attn_mask = self.forward(x, c, return_attn=True)
+
+        # find a (random) counterfactual: a (random) perturbation of the input that would change the prediction
+        counterfactuals = {'sample_id': [], 'old_pred': [], 'new_pred': [], 'old_concepts': [], 'new_concepts': []}
+        for sid, (concept_emb, old_concept_score, old_pred) in enumerate(zip(x, c, old_preds)):
+            concept_emb, old_concept_score = concept_emb.unsqueeze(0), old_concept_score.unsqueeze(0)
+            new_concept_score = copy.deepcopy(old_concept_score)
+            target_pred = (1 - old_pred).argmax(dim=-1)
+
+            # select a random sequence of concepts to perturb
+            rnd_concept_idxs = torch.randperm(self.in_features)
+            for rnd_concept_idx in rnd_concept_idxs:
+                # perturb concept score
+                new_concept_score[:, rnd_concept_idx] = 1 - old_concept_score[:, rnd_concept_idx]
+                # update attention weights according to new concept scores
+                new_logic_attn = (1 - new_concept_score).unsqueeze(-1).repeat(1, 1, self.n_classes)
+                new_logic_attn[:, :, target_pred] = new_concept_score
+                # generate new prediction
+                new_pred = self.forward(concept_emb, new_concept_score, logic_attn=new_logic_attn, filter_attn=torch.ones_like(new_logic_attn))
+                if not (new_pred>0.5).eq(old_pred>0.5).all():
+                    counterfactuals['sample_id'].append(sid)
+                    counterfactuals['old_pred'].append(old_pred.tolist()[0])
+                    counterfactuals['new_pred'].append(new_pred.tolist())
+                    counterfactuals['old_concepts'].append(old_concept_score.tolist()[0])
+                    counterfactuals['new_concepts'].append(new_concept_score.tolist()[0])
+                    break
+        return counterfactuals
 
 
 class EntropyLinear(nn.Module):

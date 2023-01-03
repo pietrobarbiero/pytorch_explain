@@ -58,19 +58,20 @@ def load_data(dataset, fold, train_epochs):
 
 
 def main():
-    # datasets = ['xor', 'trig', 'vec']
-    datasets = ['xor']
+    datasets = ['xor', 'trig', 'vec']
+    # datasets = ['xor']
     folds = [i+1 for i in range(5)]
     train_epochs = 500
     epochs = 500
     learning_rate = 0.008
     batch_size = 500
     limit_batches = 1.0
-    n_hidden = 30
-    temperature = 10000
+    n_hidden = 50
+    temperature = 1000000000
     results = []
     local_explanations_df = pd.DataFrame()
     global_explanations_df = pd.DataFrame()
+    counterfactuals_df = pd.DataFrame()
     cols = ['rules', 'accuracy', 'fold', 'model', 'dataset']
     for dataset in datasets:
         for fold in folds:
@@ -83,7 +84,7 @@ def main():
             test_dl = torch.utils.data.DataLoader(test_data, batch_size, shuffle=False, pin_memory=True)
 
             c_emb = train_data.tensors[1]
-            c_scores = train_data.tensors[0]
+            c_scores = (train_data.tensors[0]>0.5).float()
             # c_emb = torch.concat((c_emb, torch.randn(c_emb.shape)), dim=1)
             # c_scores = torch.concat((c_scores, torch.zeros_like(c_scores)), dim=1)
             y = train_data.tensors[3]
@@ -91,15 +92,14 @@ def main():
             # n_classes = 3
             logic = ProductTNorm()
 
-            model = DCR(c_scores.shape[1], n_hidden, emb_size, n_classes, logic, temperature)
+            model = DCR(c_scores.shape[1], emb_size, n_classes, logic, temperature, 1.)
             optimizer = torch.optim.AdamW(model.parameters(), lr=0.001)
-            loss_form = torch.nn.BCEWithLogitsLoss()
+            loss_form = torch.nn.CrossEntropyLoss()
             model.train()
             for epoch in range(1001):
                 # train step
                 optimizer.zero_grad()
                 y_pred = model(c_emb, c_scores)
-                y_pred = torch.softmax(y_pred, dim=1)
                 loss = loss_form(y_pred, y)
                 loss.backward()
                 optimizer.step()
@@ -107,14 +107,15 @@ def main():
                 # compute accuracy
                 if epoch % 100 == 0:
                     accuracy = accuracy_score(y[:, 1], y_pred.argmax(dim=-1).detach())
+                    # accuracy = accuracy_score((y>0.5).ravel(), (y_pred>0.5).ravel().detach())
                     print(f'Epoch {epoch}: loss {loss:.4f} train accuracy: {accuracy:.4f}')
 
             c_emb = test_data.tensors[1]
             c_scores = test_data.tensors[0]
             y = test_data.tensors[3]
             y_pred = model(c_emb, c_scores)
-            y_pred = torch.softmax(y_pred, dim=1)
             test_accuracy = accuracy_score(y[:, 1], y_pred.argmax(dim=-1).detach())
+            # test_accuracy = accuracy_score((y > 0.5).ravel(), (y_pred > 0.5).ravel().detach())
             print(f'Test accuracy: {test_accuracy:.4f}')
 
             local_explanations = model.explain(c_emb, c_scores, mode='local')
@@ -133,6 +134,13 @@ def main():
 
             results.append(['', test_accuracy, fold, 'DCR (ours)', dataset])
             pd.DataFrame(results, columns=cols).to_csv(os.path.join(results_dir, 'accuracy.csv'))
+
+            counterfactuals = model.counterfact(c_emb, c_scores)
+            counterfactuals = pd.DataFrame(counterfactuals)
+            counterfactuals['fold'] = fold
+            counterfactuals['dataset'] = dataset
+            counterfactuals_df = pd.concat([counterfactuals_df, counterfactuals], axis=0)
+            counterfactuals_df.to_csv(os.path.join(results_dir, 'counterfactuals.csv'))
 
 
 if __name__ == '__main__':
