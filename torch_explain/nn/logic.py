@@ -43,54 +43,59 @@ class DCR(torch.nn.Module):
         torch.nn.init.kaiming_uniform_(self.w_key_filter, a=math.sqrt(5))
         torch.nn.init.kaiming_uniform_(self.w_query_filter, a=math.sqrt(5))
 
-    def forward(self, x, c, return_attn=False, logic_attn=None, filter_attn=None):
+    def forward(self, x, c, return_attn=False, sign_attn=None, filter_attn=None):
         values = c.unsqueeze(-1).repeat(1, 1, self.n_classes)
         # x = c.unsqueeze(-1).repeat(1, 1, self.emb_size)
 
-        if logic_attn is None:
+        if sign_attn is None:
             # compute attention scores to build logic sentence
             # each attention score will represent whether the concept should be active or not in the logic sentence
-            logic_keys = x @ self.w_key_logic   # TODO: might be independent from input x (but requires OR)
-            logic_attn = torch.sigmoid(logic_keys @ self.w_query_logic)
+            logic_keys = x @ self.w_key_logic   # TODO: might be independent of input x (but requires OR)
+            sign_attn = torch.sigmoid(logic_keys @ self.w_query_logic)
 
         # attention scores need to be aligned with predicted concept truth values (attn <-> values)
-        # (not A or V) and (A or not V) <-> (A <-> V)
-        logic_terms = self.logic.iff_pair(logic_attn, values)
+        # (not A or V) and (A or not V) <-> (A <-> V)   # TODO: Fra check
+        sign_terms = self.logic.iff_pair(sign_attn, values)    # TODO: temperature sharp here?
         # control sharpness of truth values
         # sharper values -> lower leakage, lower accuracy
         # less sharp values -> higher leakage, higher accuracy
-        logic_terms = torch.sigmoid(self.temperature_sharp * (logic_terms - 0.5))
+        # sign_terms = torch.sigmoid(self.temperature_sharp * (sign_terms - 0.5))
 
         if filter_attn is None:
             # compute attention scores to identify only relevant concepts for each class
-            filter_keys = x @ self.w_key_filter   # TODO: might be independent from input x (but requires OR)
+            filter_keys = x @ self.w_key_filter   # TODO: might be independent of input x (but requires OR)
             filter_attn = softmaxnorm(filter_keys @ self.w_query_filter, self.temperature_complexity)
 
         # filter values
-        # filtered -> neg or
-        filtered_values = self.logic.disj_pair(logic_terms, self.logic.neg(filter_attn))
+        # filtered implemented as "or(a, not b)", corresponding to "b -> a"
+        filtered_values = self.logic.disj_pair(sign_terms, self.logic.neg(filter_attn))
 
         # generate minterm
-        preds = self.logic.conj(filtered_values, dim=1).softmax(dim=-1).squeeze()
+        # preds = self.logic.conj(filtered_values, dim=1).squeeze().float()
+        preds = self.logic.conj(filtered_values, dim=1).softmax(dim=-1).squeeze()   # FIXME: softmax looks weird
+
+        # TODO: add OR for global explanations
+
         if return_attn:
-            return preds, logic_attn > 0.5, filter_attn > 0.5   # FIXME: handle None cases
+            return preds, sign_attn, filter_attn   # FIXME: handle None cases
         else:
             return preds
 
     def explain(self, x, c, mode):
         assert mode in ['local', 'global']
 
-        y_preds, logic_attn_mask, filter_attn_mask = self.forward(x, c, return_attn=True)
+        y_preds, sign_attn_mask, filter_attn_mask = self.forward(x, c, return_attn=True)
+        sign_attn_mask, filter_attn_mask = sign_attn_mask > 0.5, filter_attn_mask > 0.5
 
         # extract local explanations
         predictions = y_preds.argmax(dim=-1).detach()
         explanations = []
         all_class_explanations = {c: [] for c in range(self.n_classes)}
-        for filter_attn, logic_attn, prediction in zip(filter_attn_mask, logic_attn_mask, predictions):
+        for filter_attn, sign_attn, prediction in zip(filter_attn_mask, sign_attn_mask, predictions):
             # select mask for predicted class only
             # and generate minterm
             minterm = []
-            for idx, (concept_score, attn_score) in enumerate(zip(logic_attn[:, prediction], filter_attn[:, prediction])):
+            for idx, (concept_score, attn_score) in enumerate(zip(sign_attn[:, prediction], filter_attn[:, prediction])):
                 if attn_score:
                     if concept_score:
                         minterm.append(f'f{idx}')
@@ -120,7 +125,7 @@ class DCR(torch.nn.Module):
 
     def counterfact(self, x, c):
         # find original predictions and assume we just want to flip them all
-        old_preds, logic_attn_mask, filter_attn_mask = self.forward(x, c, return_attn=True)
+        old_preds = self.forward(x, c)
 
         # find a (random) counterfactual: a (random) perturbation of the input that would change the prediction
         counterfactuals = {'sample_id': [], 'old_pred': [], 'new_pred': [], 'old_concepts': [], 'new_concepts': []}
@@ -135,13 +140,15 @@ class DCR(torch.nn.Module):
                 # perturb concept score
                 new_concept_score[:, rnd_concept_idx] = 1 - old_concept_score[:, rnd_concept_idx]
                 # update attention weights according to new concept scores
-                new_logic_attn = (1 - new_concept_score).unsqueeze(-1).repeat(1, 1, self.n_classes)
-                new_logic_attn[:, :, target_pred] = new_concept_score
+                new_sign_attn = (1 - new_concept_score).unsqueeze(-1).repeat(1, 1, self.n_classes)
+                new_sign_attn[:, :, target_pred] = new_concept_score
                 # generate new prediction
-                new_pred = self.forward(concept_emb, new_concept_score, logic_attn=new_logic_attn, filter_attn=torch.ones_like(new_logic_attn))
-                if not (new_pred>0.5).eq(old_pred>0.5).all():
+                new_pred = self.forward(concept_emb, new_concept_score,
+                                        sign_attn=new_sign_attn,
+                                        filter_attn=torch.ones_like(new_sign_attn)) # TODO: we may start with original attn
+                if new_pred.argmax(dim=-1) == target_pred:
                     counterfactuals['sample_id'].append(sid)
-                    counterfactuals['old_pred'].append(old_pred.tolist()[0])
+                    counterfactuals['old_pred'].append(old_pred.tolist())
                     counterfactuals['new_pred'].append(new_pred.tolist())
                     counterfactuals['old_concepts'].append(old_concept_score.tolist()[0])
                     counterfactuals['new_concepts'].append(new_concept_score.tolist()[0])

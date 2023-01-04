@@ -4,10 +4,15 @@ import os
 import math
 
 import torch
-from sklearn.metrics import accuracy_score
+from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import accuracy_score, f1_score
+from sklearn.tree import DecisionTreeClassifier
 from torch.nn import BCELoss
 from torch.nn.functional import one_hot
 from collections import Counter
+
+from xgboost import XGBClassifier
 
 from experiments.rlens.model import DeepConceptReasoner
 from torch_explain.logic.semantics import ProductTNorm, VectorLogic
@@ -28,13 +33,22 @@ from torch_explain.nn.logic import DCR
 os.environ["CUDA_VISIBLE_DEVICES"] = ""
 
 def load_data(dataset, fold, train_epochs):
-    c = np.load(f'./results/{dataset}_activations_final_rerun/test_embedding_acts/MixtureEmbModelSharedProb_AdaptiveDropout_NoProbConcat_lambda_fold_{fold}/test_embedding_semantics_on_epoch_{train_epochs}.npy')
-    c_emb = np.load(f'./results/{dataset}_activations_final_rerun/test_embedding_acts/MixtureEmbModelSharedProb_AdaptiveDropout_NoProbConcat_lambda_fold_{fold}/test_embedding_vectors_on_epoch_{train_epochs}.npy')
-    y_cem = np.load(f'./results/{dataset}_activations_final_rerun/test_embedding_acts/MixtureEmbModelSharedProb_AdaptiveDropout_NoProbConcat_lambda_fold_{fold}/test_model_output_on_epoch_{train_epochs}.npy')
-    # c1 = np.load('./results/xor_activations_final_rerun/test_embedding_acts/c_test.npy')
-    # c2 = np.load('./results/xor_activations_final_rerun/test_embedding_acts/c_val.npy')
-    # y1 = np.load('./results/xor_activations_final_rerun/test_embedding_acts/y_test.npy')
-    y = np.load(f'./results/{dataset}_activations_final_rerun/test_embedding_acts/y_val.npy')
+    if dataset in ['cub', 'celeba']:
+        c = np.load(f'./results/{dataset}_activations_final_rerun/test_embedding_acts/MixtureEmbModelSharedProb_Adaptive_NoProbConcat_resnet34_fold_{fold}/test_embedding_semantics_on_epoch_{train_epochs}.npy')
+        c_emb = np.load(f'./results/{dataset}_activations_final_rerun/test_embedding_acts/MixtureEmbModelSharedProb_Adaptive_NoProbConcat_resnet34_fold_{fold}/test_embedding_vectors_on_epoch_{train_epochs}.npy')
+        y_cem = np.load(f'./results/{dataset}_activations_final_rerun/test_embedding_acts/MixtureEmbModelSharedProb_Adaptive_NoProbConcat_resnet34_fold_{fold}/test_model_output_on_epoch_{train_epochs}.npy')
+        # c1 = np.load('./results/xor_activations_final_rerun/test_embedding_acts/c_test.npy')
+        # c2 = np.load('./results/xor_activations_final_rerun/test_embedding_acts/c_val.npy')
+        # y1 = np.load('./results/xor_activations_final_rerun/test_embedding_acts/y_test.npy')
+        y = np.load(f'./results/{dataset}_activations_final_rerun/test_embedding_acts/y_val.npy')
+    else:
+        c = np.load(f'./results/{dataset}_activations_final_rerun/test_embedding_acts/MixtureEmbModelSharedProb_AdaptiveDropout_NoProbConcat_lambda_fold_{fold}/test_embedding_semantics_on_epoch_{train_epochs}.npy')
+        c_emb = np.load(f'./results/{dataset}_activations_final_rerun/test_embedding_acts/MixtureEmbModelSharedProb_AdaptiveDropout_NoProbConcat_lambda_fold_{fold}/test_embedding_vectors_on_epoch_{train_epochs}.npy')
+        y_cem = np.load(f'./results/{dataset}_activations_final_rerun/test_embedding_acts/MixtureEmbModelSharedProb_AdaptiveDropout_NoProbConcat_lambda_fold_{fold}/test_model_output_on_epoch_{train_epochs}.npy')
+        # c1 = np.load('./results/xor_activations_final_rerun/test_embedding_acts/c_test.npy')
+        # c2 = np.load('./results/xor_activations_final_rerun/test_embedding_acts/c_val.npy')
+        # y1 = np.load('./results/xor_activations_final_rerun/test_embedding_acts/y_test.npy')
+        y = np.load(f'./results/{dataset}_activations_final_rerun/test_embedding_acts/y_val.npy')
 
     c = torch.FloatTensor(c)
     c_emb = torch.FloatTensor(c_emb)
@@ -58,74 +72,99 @@ def load_data(dataset, fold, train_epochs):
 
 
 def main():
+    random_state = 42
     datasets = ['xor', 'trig', 'vec']
+    train_epochs = [500, 500, 500]
+    n_epochs = [3000, 3000, 3000]
+    temperatures = [10000000, 10000000, 10000000]
+
+    # datasets = ['cub', 'celeba']
+    # train_epochs = [300, 200]
+    # datasets = ['celeba', 'bla']
+    # train_epochs = [200, 200]
+    # n_epochs = [300, 300]
+    # temperatures = [100, 0.1]
+    max_classes = 10
+
     # datasets = ['xor']
+    competitors = [
+        DecisionTreeClassifier(random_state=random_state),
+        LogisticRegression(random_state=random_state),
+        # XGBClassifier(),
+        # GradientBoostingClassifier(random_state=random_state)
+        RandomForestClassifier(random_state=random_state)
+    ]
     folds = [i+1 for i in range(5)]
-    train_epochs = 500
-    epochs = 500
+    # train_epochs = 500
+    # epochs = 500
     learning_rate = 0.008
     batch_size = 500
     limit_batches = 1.0
     n_hidden = 50
-    temperature = 1000000000
     results = []
     local_explanations_df = pd.DataFrame()
     global_explanations_df = pd.DataFrame()
     counterfactuals_df = pd.DataFrame()
+    logic = ProductTNorm()
     cols = ['rules', 'accuracy', 'fold', 'model', 'dataset']
-    for dataset in datasets:
+    for dataset, train_epoch, epochs, temperature in zip(datasets, train_epochs, n_epochs, temperatures):
         for fold in folds:
-            results_dir = f"./results/dcr/"
+            results_dir = f"./results/dcr2/"
             os.makedirs(results_dir, exist_ok=True)
             model_path = os.path.join(results_dir, 'model.pt')
 
-            train_data, test_data, in_concepts, out_concepts, emb_size, concept_names, class_names = load_data(dataset, fold, train_epochs)
+            train_data, test_data, in_concepts, out_concepts, emb_size, concept_names, class_names = load_data(dataset, fold, train_epoch)
             train_dl = torch.utils.data.DataLoader(train_data, batch_size, shuffle=True, pin_memory=True)
             test_dl = torch.utils.data.DataLoader(test_data, batch_size, shuffle=False, pin_memory=True)
 
-            c_emb = train_data.tensors[1]
-            c_scores = (train_data.tensors[0]>0.5).float()
+            c_emb_train = train_data.tensors[1]
+            c_scores_train = (train_data.tensors[0]>0.5).float()
             # c_emb = torch.concat((c_emb, torch.randn(c_emb.shape)), dim=1)
             # c_scores = torch.concat((c_scores, torch.zeros_like(c_scores)), dim=1)
-            y = train_data.tensors[3]
-            n_classes = len(class_names)
+            y_train = train_data.tensors[3]
+            # n_classes = len(class_names)
             # n_classes = 3
-            logic = ProductTNorm()
+            if dataset == 'cub':
+                y_train = y_train[:, :max_classes]
+            class_names = [f'y{i}' for i in range(y_train.shape[1])]
+            n_classes = len(class_names)
 
-            model = DCR(c_scores.shape[1], emb_size, n_classes, logic, temperature, 1.)
+            model = DCR(c_scores_train.shape[1], emb_size, n_classes, logic, temperature, 10.)
             optimizer = torch.optim.AdamW(model.parameters(), lr=0.001)
             loss_form = torch.nn.CrossEntropyLoss()
             model.train()
-            for epoch in range(1001):
+            for epoch in range(epochs):
                 # train step
                 optimizer.zero_grad()
-                y_pred = model(c_emb, c_scores)
-                loss = loss_form(y_pred, y)
+                y_pred, sign_attn_mask, filter_attn_mask = model.forward(c_emb_train, c_scores_train, return_attn=True)
+                loss = loss_form(y_pred, y_train) #+ epoch / epochs * 1 / (torch.linalg.norm(filter_attn_mask.ravel() - 0.5, -float('inf')) + 0.001)
                 loss.backward()
                 optimizer.step()
 
                 # compute accuracy
                 if epoch % 100 == 0:
-                    accuracy = accuracy_score(y[:, 1], y_pred.argmax(dim=-1).detach())
-                    # accuracy = accuracy_score((y>0.5).ravel(), (y_pred>0.5).ravel().detach())
+                    accuracy = f1_score(y_train.argmax(dim=-1).detach(), y_pred.argmax(dim=-1).detach(), average='weighted')
+                    # accuracy = accuracy_score((y_train>0.5).ravel(), (y_pred>0.5).ravel().detach())
                     print(f'Epoch {epoch}: loss {loss:.4f} train accuracy: {accuracy:.4f}')
 
-            c_emb = test_data.tensors[1]
-            c_scores = test_data.tensors[0]
-            y = test_data.tensors[3]
-            y_pred = model(c_emb, c_scores)
-            test_accuracy = accuracy_score(y[:, 1], y_pred.argmax(dim=-1).detach())
+            c_emb_test = test_data.tensors[1]
+            c_scores_test = test_data.tensors[0]
+            y_test = test_data.tensors[3]
+            if dataset == 'cub':
+                y_test = y_test[:, :max_classes]
+            y_pred = model(c_emb_test, c_scores_test)
+            test_accuracy = f1_score(y_test.argmax(dim=-1).detach(), y_pred.argmax(dim=-1).detach(), average='weighted')
             # test_accuracy = accuracy_score((y > 0.5).ravel(), (y_pred > 0.5).ravel().detach())
             print(f'Test accuracy: {test_accuracy:.4f}')
 
-            local_explanations = model.explain(c_emb, c_scores, mode='local')
+            local_explanations = model.explain(c_emb_test, c_scores_test, mode='local')
             local_explanations = pd.DataFrame(local_explanations)
             local_explanations['fold'] = fold
             local_explanations['dataset'] = dataset
             local_explanations_df = pd.concat([local_explanations_df, local_explanations], axis=0)
             local_explanations_df.to_csv(os.path.join(results_dir, 'local_explanations.csv'))
 
-            global_explanations = model.explain(c_emb, c_scores, mode='global')
+            global_explanations = model.explain(c_emb_test, c_scores_test, mode='global')
             global_explanations = pd.DataFrame(global_explanations)
             global_explanations['fold'] = fold
             global_explanations['dataset'] = dataset
@@ -135,12 +174,23 @@ def main():
             results.append(['', test_accuracy, fold, 'DCR (ours)', dataset])
             pd.DataFrame(results, columns=cols).to_csv(os.path.join(results_dir, 'accuracy.csv'))
 
-            counterfactuals = model.counterfact(c_emb, c_scores)
+            counterfactuals = model.counterfact(c_emb_test, c_scores_test)
             counterfactuals = pd.DataFrame(counterfactuals)
             counterfactuals['fold'] = fold
             counterfactuals['dataset'] = dataset
             counterfactuals_df = pd.concat([counterfactuals_df, counterfactuals], axis=0)
             counterfactuals_df.to_csv(os.path.join(results_dir, 'counterfactuals.csv'))
+
+            # competitors!
+            print('\nAnd now run competitors!\n')
+            for classifier in competitors:
+                classifier.fit(c_scores_train, y_train.argmax(dim=-1).detach())
+                y_pred = classifier.predict(c_scores_test)
+                test_accuracy = f1_score(y_test.argmax(dim=-1).detach(), y_pred, average='weighted')
+                print(f'{classifier.__class__.__name__}: Test accuracy: {test_accuracy:.4f}')
+
+                results.append(['', test_accuracy, fold, classifier.__class__.__name__, dataset])
+                pd.DataFrame(results, columns=cols).to_csv(os.path.join(results_dir, 'accuracy.csv'))
 
 
 if __name__ == '__main__':
