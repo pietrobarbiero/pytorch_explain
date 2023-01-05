@@ -73,26 +73,24 @@ def load_data(dataset, fold, train_epochs):
 
 def main():
     random_state = 42
-    datasets = ['xor', 'trig', 'vec']
-    train_epochs = [500, 500, 500]
-    n_epochs = [3000, 3000, 3000]
-    temperatures = [10000000, 10000000, 10000000]
+    datasets = ['xor', 'trig', 'vec', 'celeba']
+    train_epochs = [500, 500, 500, 200]
+    n_epochs = [3000, 3000, 3000, 3000]
+    temperatures = [10000000, 10000000, 10000000, 100]
 
-    # datasets = ['cub', 'celeba']
-    # train_epochs = [300, 200]
-    # datasets = ['celeba', 'bla']
-    # train_epochs = [200, 200]
-    # n_epochs = [300, 300]
-    # temperatures = [100, 0.1]
-    max_classes = 10
+    # datasets = ['cub']
+    # train_epochs = [300]
+    # n_epochs = [300]
+    # temperatures = [100]
+    max_classes = 20
 
     # datasets = ['xor']
     competitors = [
         DecisionTreeClassifier(random_state=random_state),
         LogisticRegression(random_state=random_state),
-        # XGBClassifier(),
-        # GradientBoostingClassifier(random_state=random_state)
-        RandomForestClassifier(random_state=random_state)
+        XGBClassifier(),
+        # GradientBoostingClassifier(random_state=random_state),
+        # RandomForestClassifier(random_state=random_state)
     ]
     folds = [i+1 for i in range(5)]
     # train_epochs = 500
@@ -109,7 +107,7 @@ def main():
     cols = ['rules', 'accuracy', 'fold', 'model', 'dataset']
     for dataset, train_epoch, epochs, temperature in zip(datasets, train_epochs, n_epochs, temperatures):
         for fold in folds:
-            results_dir = f"./results/dcr2/"
+            results_dir = f"./results/dcr/"
             os.makedirs(results_dir, exist_ok=True)
             model_path = os.path.join(results_dir, 'model.pt')
 
@@ -125,7 +123,16 @@ def main():
             # n_classes = len(class_names)
             # n_classes = 3
             if dataset == 'cub':
+                maxc = 50
                 y_train = y_train[:, :max_classes]
+                c_emb_train = c_emb_train[:, :maxc]
+                c_scores_train = c_scores_train[:, :maxc]
+            if dataset == 'celeba':
+                maxc = 3
+                y_train = one_hot(torch.sum(c_scores_train[:, 2:], dim=1).long()).float()
+                c_emb_train = c_emb_train[:, :maxc]
+                c_scores_train = c_scores_train[:, :maxc]
+
             class_names = [f'y{i}' for i in range(y_train.shape[1])]
             n_classes = len(class_names)
 
@@ -137,7 +144,7 @@ def main():
                 # train step
                 optimizer.zero_grad()
                 y_pred, sign_attn_mask, filter_attn_mask = model.forward(c_emb_train, c_scores_train, return_attn=True)
-                loss = loss_form(y_pred, y_train) #+ epoch / epochs * 1 / (torch.linalg.norm(filter_attn_mask.ravel() - 0.5, -float('inf')) + 0.001)
+                loss = loss_form(y_pred, y_train) #+ 0.1 * 1 / (torch.linalg.norm(filter_attn_mask.ravel() - 0.5, -float('inf')) + 0.001)
                 loss.backward()
                 optimizer.step()
 
@@ -148,10 +155,19 @@ def main():
                     print(f'Epoch {epoch}: loss {loss:.4f} train accuracy: {accuracy:.4f}')
 
             c_emb_test = test_data.tensors[1]
-            c_scores_test = test_data.tensors[0]
+            c_scores_test = (test_data.tensors[0] > 0.5).float()
             y_test = test_data.tensors[3]
             if dataset == 'cub':
+                maxc = 50
                 y_test = y_test[:, :max_classes]
+                c_emb_test = c_emb_test[:, :maxc]
+                c_scores_test = c_scores_test[:, :maxc]
+            if dataset == 'celeba':
+                maxc = 3
+                y_test = one_hot(torch.sum(c_scores_test[:, 2:], dim=1).long()).float()
+                c_emb_test = c_emb_test[:, :maxc]
+                c_scores_test = c_scores_test[:, :maxc]
+
             y_pred = model(c_emb_test, c_scores_test)
             test_accuracy = f1_score(y_test.argmax(dim=-1).detach(), y_pred.argmax(dim=-1).detach(), average='weighted')
             # test_accuracy = accuracy_score((y > 0.5).ravel(), (y_pred > 0.5).ravel().detach())

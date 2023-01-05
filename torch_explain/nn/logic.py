@@ -64,8 +64,7 @@ class DCR(torch.nn.Module):
         if filter_attn is None:
             # compute attention scores to identify only relevant concepts for each class
             filter_keys = x @ self.w_key_filter   # TODO: might be independent of input x (but requires OR)
-            # filter_attn = softmaxnorm(filter_keys @ self.w_query_filter, self.temperature_complexity)
-            filter_attn = torch.sigmoid(filter_keys @ self.w_query_filter)
+            filter_attn = softmaxnorm(filter_keys @ self.w_query_filter, self.temperature_complexity)
 
         # filter values
         # filtered implemented as "or(a, not b)", corresponding to "b -> a"
