@@ -64,7 +64,8 @@ class DCR(torch.nn.Module):
         if filter_attn is None:
             # compute attention scores to identify only relevant concepts for each class
             filter_keys = x @ self.w_key_filter   # TODO: might be independent of input x (but requires OR)
-            filter_attn = softmaxnorm(filter_keys @ self.w_query_filter, self.temperature_complexity)
+            # filter_attn = softmaxnorm(filter_keys @ self.w_query_filter, self.temperature_complexity)
+            filter_attn = torch.sigmoid(filter_keys @ self.w_query_filter)
 
         # filter values
         # filtered implemented as "or(a, not b)", corresponding to "b -> a"
@@ -129,9 +130,10 @@ class DCR(torch.nn.Module):
 
         # find a (random) counterfactual: a (random) perturbation of the input that would change the prediction
         counterfactuals = {'sample_id': [], 'old_pred': [], 'new_pred': [], 'old_concepts': [], 'new_concepts': []}
-        for sid, (concept_emb, old_concept_score, old_pred) in enumerate(zip(x, c, old_preds)):
-            concept_emb, old_concept_score = concept_emb.unsqueeze(0), old_concept_score.unsqueeze(0)
+        for sid, (old_concept_emb, old_concept_score, old_pred) in enumerate(zip(x, c, old_preds)):
+            old_concept_emb, old_concept_score = old_concept_emb.unsqueeze(0), old_concept_score.unsqueeze(0)
             new_concept_score = copy.deepcopy(old_concept_score)
+            new_concept_emb = copy.deepcopy(old_concept_emb)
             target_pred = (1 - old_pred).argmax(dim=-1)
 
             # select a random sequence of concepts to perturb
@@ -139,13 +141,13 @@ class DCR(torch.nn.Module):
             for rnd_concept_idx in rnd_concept_idxs:
                 # perturb concept score
                 new_concept_score[:, rnd_concept_idx] = 1 - old_concept_score[:, rnd_concept_idx]
-                # update attention weights according to new concept scores
-                new_sign_attn = (1 - new_concept_score).unsqueeze(-1).repeat(1, 1, self.n_classes)
-                new_sign_attn[:, :, target_pred] = new_concept_score
+                # perturb concept embedding
+                new_concept_emb[:, rnd_concept_idx] = torch.mean(x[old_preds.argmax(dim=-1)==target_pred, rnd_concept_idx], dim=0)
+                # TODO: rule intervention? update attention weights according to new concept scores
+                # new_sign_attn = (1 - new_concept_score).unsqueeze(-1).repeat(1, 1, self.n_classes)
+                # new_sign_attn[:, :, target_pred] = new_concept_score
                 # generate new prediction
-                new_pred = self.forward(concept_emb, new_concept_score,
-                                        sign_attn=new_sign_attn,
-                                        filter_attn=torch.ones_like(new_sign_attn)) # TODO: we may start with original attn
+                new_pred = self.forward(new_concept_emb, new_concept_score) # TODO: we may start with original attn and then make all concepts available
                 if new_pred.argmax(dim=-1) == target_pred:
                     counterfactuals['sample_id'].append(sid)
                     counterfactuals['old_pred'].append(old_pred.tolist())
