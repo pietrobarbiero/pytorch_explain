@@ -88,7 +88,7 @@ def explain_class(model: torch.nn.Module, c: torch.Tensor, y: torch.Tensor,
                   train_mask: torch.Tensor, val_mask: torch.Tensor, target_class: int, edge_index: torch.Tensor = None,
                   max_minterm_complexity: int = None, topk_explanations: int = 3, max_accuracy: bool = False,
                   concept_names: List = None, try_all: bool = True, c_threshold: float = 0.5,
-                  y_threshold: float = 0., good_bad_terms: bool = False) -> Tuple[str, Dict]:
+                  y_threshold: float = 0., good_bad_terms: bool = False, simplify: bool = False) -> Tuple[str, Dict]:
     """
     Generate a local explanation for a single sample.
     :param model: pytorch model
@@ -106,6 +106,7 @@ def explain_class(model: torch.nn.Module, c: torch.Tensor, y: torch.Tensor,
     :param c_threshold: threshold to get truth values for concept predictions (i.e. pred<threshold = false, pred>threshold = true)
     :param y_threshold: threshold to get truth values for class predictions (i.e. pred<threshold = false, pred>threshold = true)
     :param good_bad_terms: if True, then good and bad terms are selected for local explanations
+    :param simplify: if True, then the resulting local explanations are simplified to get more compact explanations
     :return: Global explanation
     """
     c_correct, y_correct, correct_mask, active_mask = _get_correct_data(c, y, train_mask, model, target_class,
@@ -183,16 +184,23 @@ def explain_class(model: torch.nn.Module, c: torch.Tensor, y: torch.Tensor,
                     c_threshold
                 )
             else:
-                aggregated_explanation, best_acc = _aggregate_explanations(
-                    local_explanations_accuracies,
-                    topk_explanations,
-                    target_class,
-                    c,
-                    y,
-                    max_accuracy,
-                    val_mask,
-                    c_threshold
-                )
+                if simplify:
+                    aggregated_explanation, best_acc = _aggregate_explanations(
+                        local_explanations_accuracies,
+                        topk_explanations,
+                        target_class,
+                        c,
+                        y,
+                        max_accuracy,
+                        val_mask,
+                        c_threshold,
+                    )
+                else:
+                    explanations = []
+                    for expl , acc in local_explanations_accuracies.items():
+                        explanation = _simplify_formula(expl, c, y, target_class, max_accuracy, val_mask, c_threshold)
+                        explanations.append("(" + explanation + ")")
+                    aggregated_explanation = "(" + " | ".join(explanations) + ")"
             class_explanation_raw = str(aggregated_explanation)
             class_explanation = class_explanation_raw
             if concept_names is not None:
@@ -319,7 +327,6 @@ def _aggregate_explanations_try_all(
     """
     if len(local_explanations_accuracy) == 0:
         return ""
-
     else:
         # get the topk most accurate local explanations
         local_explanations_sorted = sorted(
