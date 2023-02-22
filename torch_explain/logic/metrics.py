@@ -48,7 +48,7 @@ def test_explanation(formula: str, x: torch.Tensor, y: torch.Tensor, target_clas
 def test_explanations(formulas: str, x: torch.Tensor, y: torch.Tensor, mask: torch.Tensor = None,
                       threshold: float = 0.5, material: bool = False) -> Tuple[float, torch.Tensor]:
     """
-    Tests alltoghether the logic formulas of different classes.
+    Tests all together the logic formulas of different classes.
     When a sample fires more than one formula, consider the sample wrongly predicted.
     :param formulas: list of logic formula, one for each class
     :param x: input data
@@ -66,9 +66,11 @@ def test_explanations(formulas: str, x: torch.Tensor, y: torch.Tensor, mask: tor
     
     y2 = y.argmax(-1)
     x = x.cpu().detach().numpy()
-    concept_list = [f"feature{i:03}" for i in range(x.shape[1])]
+    concept_list = [f"feature{i:010}" for i in range(x.shape[1])]
     
     # get predictions using sympy
+    global class_predictions  # remove
+    global class_predictions_filtered_by_pred
     class_predictions = torch.zeros(len(formulas), x.shape[0])
     for i , formula in enumerate(formulas):
         explanation = to_dnf(formula)
@@ -76,8 +78,8 @@ def test_explanations(formulas: str, x: torch.Tensor, y: torch.Tensor, mask: tor
         
         predictions = fun(*[x[:, i] > threshold for i in range(x.shape[1])])
         predictions = torch.LongTensor(predictions)
-        class_predictions[i] = predictions        
-        
+        class_predictions[i] = predictions          
+    
     class_predictions_filtered_by_pred = torch.zeros(class_predictions.shape[1])
     for i in range(class_predictions.shape[1]):
         if sum(class_predictions[:, i]) in [0,2]: #todo: vectorize
