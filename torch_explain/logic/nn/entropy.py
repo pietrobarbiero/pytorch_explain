@@ -15,7 +15,7 @@ from torch_explain.nn.logic import EntropyLinear
 
 
 def explain_classes(model: torch.nn.Module, c: torch.Tensor, y: torch.Tensor,
-                    train_mask: torch.Tensor, test_mask: torch.Tensor, val_mask: torch.Tensor = None,
+                    train_mask: torch.Tensor = None, test_mask: torch.Tensor = None, val_mask: torch.Tensor = None,
                     edge_index: torch.Tensor = None, max_minterm_complexity: int = 1000,
                     topk_explanations: int = 1000, try_all: bool = False,
                     c_threshold: float = 0.5, y_threshold: float = 0.,
@@ -47,6 +47,9 @@ def explain_classes(model: torch.nn.Module, c: torch.Tensor, y: torch.Tensor,
     """
     if len(y.shape) == 1:
         y = one_hot(y)
+
+    if train_mask is None:
+        train_mask = torch.arange(len(c))
 
     if val_mask is None:
         val_mask = train_mask
