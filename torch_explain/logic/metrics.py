@@ -43,6 +43,58 @@ def test_explanation(formula: str, x: torch.Tensor, y: torch.Tensor, target_clas
             # material biconditional: (p<=>q) <=> (p and q) or (not p and not q)
             accuracy = accuracy_score(predictions[mask], y2[mask])
         return accuracy, predictions
+    
+
+def test_explanations(formulas: str, x: torch.Tensor, y: torch.Tensor, mask: torch.Tensor = None,
+                      threshold: float = 0.5, material: bool = False) -> Tuple[float, torch.Tensor]:
+    """
+    Tests all together the logic formulas of different classes.
+    When a sample fires more than one formula, consider the sample wrongly predicted.
+    :param formulas: list of logic formula, one for each class
+    :param x: input data
+    :param y: input labels (MUST be one-hot encoded)
+    :param mask: sample mask
+    :param threshold: threshold to get concept truth values
+    :return: Accuracy of the explanation and predictions
+    """
+    if formulas is None or formulas == []:
+        return 0.0, None
+    for formula in formulas:
+        if formula in ['True', 'False', '']:
+            return 0.0, None  
+    assert len(y.shape) == 2
+    
+    y2 = y.argmax(-1)
+    x = x.cpu().detach().numpy()
+    concept_list = [f"feature{i:010}" for i in range(x.shape[1])]
+    
+    # get predictions using sympy
+    global class_predictions  # remove
+    global class_predictions_filtered_by_pred
+    class_predictions = torch.zeros(len(formulas), x.shape[0])
+    for i , formula in enumerate(formulas):
+        explanation = to_dnf(formula)
+        fun = lambdify(concept_list, explanation, 'numpy')
+        
+        predictions = fun(*[x[:, i] > threshold for i in range(x.shape[1])])
+        predictions = torch.LongTensor(predictions)
+        class_predictions[i] = predictions          
+    
+    class_predictions_filtered_by_pred = torch.zeros(class_predictions.shape[1])
+    for i in range(class_predictions.shape[1]):
+        if sum(class_predictions[:, i]) in [0,2]: #todo: vectorize
+            class_predictions_filtered_by_pred[i] = -1 #consider as an error
+        else:
+            class_predictions_filtered_by_pred[i] = class_predictions[:, i].argmax(-1)
+        
+    if material:
+        # material implication: (p=>q) <=> (not p or q)
+        accuracy = torch.sum(torch.logical_or(torch.logical_not(predictions[mask]), y2[mask])) / len(y2[mask])
+        accuracy = accuracy.item()
+    else:
+        # material biconditional: (p<=>q) <=> (p and q) or (not p and not q)
+        accuracy = accuracy_score(class_predictions_filtered_by_pred[mask], y2[mask])
+    return accuracy, class_predictions_filtered_by_pred
 
 
 def complexity(formula: str, to_dnf: bool = False) -> float:
