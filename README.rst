@@ -125,22 +125,14 @@ how the network composed the input features to obtain the predictions:
     from torch.nn.functional import one_hot
 
     y1h = one_hot(y_train)
-    explanation, _ = entropy.explain_class(model, x_train, y1h, x_train, y1h, target_class=1)
+    global_explanations, local_explanations = entropy.explain_classes(model, x_train, y_train, c_threshold=0.5, y_threshold=0.)
 
 Explanations will be logic formulas in disjunctive normal form.
-In this case, the explanation will be ``y=1 IFF (f1 AND ~f2) OR (f2  AND ~f1)``
-corresponding to ``y=1 IFF f1 XOR f2``.
+In this case, the explanation will be ``y=1`` if and only if ``(f1 AND ~f2) OR (f2  AND ~f1)``
+corresponding to ``f1 XOR f2``.
 
-The quality of the logic explanation can **quantitatively** assessed in terms
-of classification accuracy and rule complexity as follows:
-
-.. code:: python
-
-    from torch_explain.logic.metrics import test_explanation, complexity
-
-    accuracy, preds = test_explanation(explanation, x_train, y1h, target_class=1)
-    explanation_complexity = complexity(explanation)
-
+The function automatically assesses the quality of logic explanations in terms
+of classification accuracy and rule complexity.
 In this case the accuracy is 100% and the complexity is 4.
 
 
