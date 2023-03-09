@@ -21,7 +21,7 @@
 
 .. |Build| image:: https://img.shields.io/travis/com/pietrobarbiero/pytorch_explain?label=Master%20Build&style=for-the-badge
     :alt: Travis (.com)
-    :target: https://app.travis-ci.com/github/pietrobarbiero/pytorch_explain
+    :target: https://app.travis-ci.com/pietrobarbiero/pytorch_explain.svg?branch=master
 
 .. |Coverage| image:: https://img.shields.io/codecov/c/gh/pietrobarbiero/pytorch_explain?label=Test%20Coverage&style=for-the-badge
     :alt: Codecov
