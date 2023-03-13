@@ -47,10 +47,14 @@
 
 
 `PyTorch, Explain!` is an extension library for PyTorch to develop
-explainable deep learning models called Logic Explained Networks (LENs).
+explainable deep learning models going beyond the current accuracy-explainability trade-off.
 
-It consists of various methods for explainability from a variety of published papers, including the APIs
-required to get first-order logic explanations from deep neural networks.
+The library includes a set of tools to develop:
+
+* Concept Embedding Models (CEMs): a class of concept-based models going beyond
+  the accuracy-explainability trade-off;
+* Logic Explained Networks (LENs): a class of concept-based models generating
+  accurate compound logic explanations for their predictions **without the need for a post-hoc explainer**.
 
 Table of Content
 -----------------
