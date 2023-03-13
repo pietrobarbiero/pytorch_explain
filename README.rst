@@ -55,12 +55,12 @@ required to get first-order logic explanations from deep neural networks.
 Table of Content
 -----------------
 * `Quick start <https://github.com/pietrobarbiero/pytorch_explain#quick-start>`_
-* :ref:`Quick tutorial on Concept Embedding Models`
-* :ref:`Quick tutorial on Logic Explained Networks`
-* :ref:`Benchmark datasets`
-* :ref:`Theory`
-* :ref:`Authors`
-* :ref:`Licence`
+* `Quick tutorial on Concept Embedding Models <https://github.com/pietrobarbiero/pytorch_explain#quick-tutorial-on-concept-embedding-models>`_
+* `Quick tutorial on Logic Explained Networks <https://github.com/pietrobarbiero/pytorch_explain#quick-tutorial-on-logic-explained-networks>`_
+* `Benchmark datasets <https://github.com/pietrobarbiero/pytorch_explain#benchmark-datasets>`_
+* `Theory <https://github.com/pietrobarbiero/pytorch_explain#theory>`_
+* `Authors <https://github.com/pietrobarbiero/pytorch_explain#authors>`_
+* `Licence <https://github.com/pietrobarbiero/pytorch_explain#licence>`_
 
 Quick start
 ---------------
