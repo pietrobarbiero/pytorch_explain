@@ -10,7 +10,6 @@ from torch_explain.logic.metrics import test_explanation, complexity
 from torch_explain.logic.utils import replace_names
 from torch_explain.logic.utils import get_predictions
 from torch_explain.logic.utils import get_the_good_and_bad_terms
-from torch_explain.nn import Conceptizator
 from torch_explain.nn.logic import EntropyLinear
 
 
@@ -21,7 +20,7 @@ def explain_classes(model: torch.nn.Module, c: torch.Tensor, y: torch.Tensor,
                     c_threshold: float = 0.5, y_threshold: float = 0.,
                     concept_names: List[str] = None, class_names: List[str] = None,
                     material: bool = False, good_bad_terms: bool = False, max_accuracy: bool = False,
-                    verbose: bool = False) -> Tuple[Dict, Dict]:
+                    verbose: bool = False, simplify: bool = False) -> Tuple[Dict, Dict]:
     """
     Explain LENs predictions with concept-based logic explanations.
 
@@ -43,6 +42,7 @@ def explain_classes(model: torch.nn.Module, c: torch.Tensor, y: torch.Tensor,
     :param good_bad_terms: if True, then good and bad terms are selected for local explanations
     :param max_accuracy: if True, then the explanations performance is computed for the maximum accuracy
     :param verbose: if True, then prints the explanations
+    :param simplify: if True, then the resulting local explanations are simplified to get more compact explanations
     :return: Global and local explanations
     """
     if len(y.shape) == 1:
@@ -62,7 +62,8 @@ def explain_classes(model: torch.nn.Module, c: torch.Tensor, y: torch.Tensor,
                                                             max_minterm_complexity=max_minterm_complexity,
                                                             topk_explanations=topk_explanations, try_all=try_all,
                                                             c_threshold=c_threshold, y_threshold=y_threshold,
-                                                            max_accuracy=max_accuracy, good_bad_terms=good_bad_terms)
+                                                            max_accuracy=max_accuracy, good_bad_terms=good_bad_terms,
+                                                            simplify=simplify)
 
         explanation_accuracy, _ = test_explanation(explanation, c, y, class_id, test_mask, c_threshold, material)
         explanation_complexity = complexity(explanation)
@@ -346,7 +347,7 @@ def _aggregate_explanations_try_all(
             if not explanation:
                 continue
 
-            predictions.append(get_predictions(explanation, x, target_class, c_threshold))
+            predictions.append(get_predictions(explanation, x, c_threshold))
             explanations.append(explanation)
 
         predictions = np.array(predictions)

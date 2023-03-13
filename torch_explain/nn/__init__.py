@@ -1,9 +1,9 @@
 from .logic import EntropyLinear
-from .concepts import Conceptizator
+from .concepts import ConceptEmbedding
 from . import functional
 
 __all__ = [
     'functional',
     'EntropyLinear',
-    'Conceptizator',
+    'ConceptEmbedding',
 ]
