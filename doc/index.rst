@@ -30,7 +30,8 @@ The source code and minimal working examples can be found on
     :maxdepth: 2
 
     user_guide/installation
-    user_guide/tutorial
+    user_guide/tutorial_lens
+    user_guide/tutorial_cem
     user_guide/contributing
     user_guide/running_tests
 
@@ -40,13 +41,13 @@ The source code and minimal working examples can be found on
 
     modules/logic/nn/entropy
     modules/logic/nn/psi
+    modules/logic/nn/utils
     modules/logic/metrics
     modules/logic/utils
     modules/nn/logic
     modules/nn/functional/loss
     modules/nn/functional/prune
     modules/nn/concepts
-    modules/models/explainer
 
 
 .. toctree::
