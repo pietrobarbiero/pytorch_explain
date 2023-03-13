@@ -54,7 +54,7 @@ required to get first-order logic explanations from deep neural networks.
 
 Table of Content
 -----------------
-* :ref:`Quick start <https://github.com/pietrobarbiero/pytorch_explain#quick-start>`_
+* `Quick start <https://github.com/pietrobarbiero/pytorch_explain#quick-start>`_
 * :ref:`Quick tutorial on Concept Embedding Models`
 * :ref:`Quick tutorial on Logic Explained Networks`
 * :ref:`Benchmark datasets`
