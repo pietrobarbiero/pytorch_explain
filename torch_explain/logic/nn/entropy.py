@@ -168,7 +168,7 @@ def explain_class(model: torch.nn.Module, c: torch.Tensor, y: torch.Tensor,
                     local_explanation_raw = " & ".join(good)
 
                 # test explanation accuracy
-                if local_explanation_raw not in local_explanations_accuracies:
+                if local_explanation_raw not in local_explanations_accuracies and local_explanation_raw:
                     accuracy, _ = test_explanation(
                         local_explanation_raw, c, y, target_class, val_mask, c_threshold
                     )
