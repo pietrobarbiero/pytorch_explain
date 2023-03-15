@@ -47,13 +47,29 @@
 
 
 `PyTorch, Explain!` is an extension library for PyTorch to develop
-explainable deep learning models called Logic Explained Networks (LENs).
+explainable deep learning models going beyond the current accuracy-explainability trade-off.
 
-It consists of various methods for explainability from a variety of published papers, including the APIs
-required to get first-order logic explanations from deep neural networks.
+The library includes a set of tools to develop:
+
+
+* Concept Embedding Models (CEMs): a class of concept-based models going
+  **beyond the current accuracy-explainability trade-off**;
+* Logic Explained Networks (LENs): a class of concept-based models generating
+  accurate compound logic explanations for their predictions
+  **without the need for a post-hoc explainer**.
+
+Table of Content
+-----------------
+* `Quick start <https://github.com/pietrobarbiero/pytorch_explain#quick-start>`_
+* `Quick tutorial on Concept Embedding Models <https://github.com/pietrobarbiero/pytorch_explain#quick-tutorial-on-concept-embedding-models>`_
+* `Quick tutorial on Logic Explained Networks <https://github.com/pietrobarbiero/pytorch_explain#quick-tutorial-on-logic-explained-networks>`_
+* `Benchmark datasets <https://github.com/pietrobarbiero/pytorch_explain#benchmark-datasets>`_
+* `Theory <https://github.com/pietrobarbiero/pytorch_explain#theory>`_
+* `Authors <https://github.com/pietrobarbiero/pytorch_explain#authors>`_
+* `Licence <https://github.com/pietrobarbiero/pytorch_explain#licence>`_
 
 Quick start
------------
+---------------
 
 You can install ``torch_explain`` along with all its dependencies from
 `PyPI <https://pypi.org/project/torch_explain/>`__:
@@ -63,8 +79,81 @@ You can install ``torch_explain`` along with all its dependencies from
     pip install torch-explain
 
 
-Example
------------
+Quick tutorial on Concept Embedding Models
+-----------------------------------------------
+
+Using concept embeddings we can solve concept-based problems very efficiently!
+For this simple tutorial, let's approach the trigonometry benchmark dataset:
+
+.. code:: python
+
+    import torch
+    import torch_explain as te
+    from torch_explain import datasets
+    from sklearn.metrics import accuracy_score
+    from sklearn.model_selection import train_test_split
+
+    x, c, y = datasets.trigonometry(500)
+    x_train, x_test, c_train, c_test, y_train, y_test = train_test_split(x, c, y, test_size=0.33, random_state=42)
+
+We just need to define a task predictor and a concept encoder using a
+concept embedding layer:
+
+.. code:: python
+
+    import torch
+    import torch_explain as te
+
+    concept_encoder = torch.nn.Sequential(
+        torch.nn.Linear(x.shape[1], 10),
+        torch.nn.LeakyReLU(),
+        te.nn.ConceptEmbedding(10, c.shape[1], embedding_size),
+    )
+    task_predictor = torch.nn.Sequential(
+        torch.nn.Linear(c.shape[1]*embedding_size, 1),
+    )
+    model = torch.nn.Sequential(concept_encoder, task_predictor)
+
+We can now train the network by optimizing the cross entropy loss
+on concepts and tasks:
+
+.. code:: python
+
+    optimizer = torch.optim.AdamW(model.parameters(), lr=0.01)
+    loss_form_c = torch.nn.BCELoss()
+    loss_form_y = torch.nn.BCEWithLogitsLoss()
+    model.train()
+    for epoch in range(501):
+        optimizer.zero_grad()
+
+        # generate concept and task predictions
+        c_emb, c_pred = concept_embedder(x_train)
+        y_pred = task_predictor(c_emb.reshape(len(c_emb), -1))
+
+        # compute loss
+        concept_loss = loss_form_c(c_pred, c_train)
+        task_loss = loss_form_y(y_pred, y_train)
+        loss = concept_loss + 0.5*task_loss
+
+        loss.backward()
+        optimizer.step()
+
+Once trained we can check the performance of the model on the test set:
+
+.. code:: python
+
+    c_emb, c_pred = concept_embedder.forward(x_test)
+    y_pred = task_predictor(c_emb.reshape(len(c_emb), -1))
+
+    task_accuracy = accuracy_score(y_test, y_pred > 0)
+    concept_accuracy = accuracy_score(c_test, c_pred > 0.5)
+
+As you can see the performance of the model is now great as the task
+task accuracy is around ~100%.
+
+
+Quick tutorial on Logic Explained Networks
+---------------------------------------------
 
 For this simple experiment, let's solve the XOR problem
 (augmented with 100 dummy features):
@@ -125,64 +214,61 @@ how the network composed the input features to obtain the predictions:
     from torch.nn.functional import one_hot
 
     y1h = one_hot(y_train)
-    explanation, _ = entropy.explain_class(model, x_train, y1h, x_train, y1h, target_class=1)
+    global_explanations, local_explanations = entropy.explain_classes(model, x_train, y_train, c_threshold=0.5, y_threshold=0.)
 
 Explanations will be logic formulas in disjunctive normal form.
-In this case, the explanation will be ``y=1 IFF (f1 AND ~f2) OR (f2  AND ~f1)``
-corresponding to ``y=1 IFF f1 XOR f2``.
+In this case, the explanation will be ``y=1`` if and only if ``(f1 AND ~f2) OR (f2  AND ~f1)``
+corresponding to ``f1 XOR f2``.
 
-The quality of the logic explanation can **quantitatively** assessed in terms
-of classification accuracy and rule complexity as follows:
-
-.. code:: python
-
-    from torch_explain.logic.metrics import test_explanation, complexity
-
-    accuracy, preds = test_explanation(explanation, x_train, y1h, target_class=1)
-    explanation_complexity = complexity(explanation)
-
+The function automatically assesses the quality of logic explanations in terms
+of classification accuracy and rule complexity.
 In this case the accuracy is 100% and the complexity is 4.
 
 
-Experiments
-------------
+Benchmark datasets
+-------------------------
 
-Training
-~~~~~~~~~~
+We provide a suite of 3 benchmark datasets to evaluate the performance of our models
+in the folder `torch_explain/datasets`. These 3 datasets were proposed as benchmarks
+for concept-based models in the paper "Concept Embedding Models: Beyond the Accuracy-Explainability Trade-Off".
 
-To train the model(s) in the paper, run the scripts and notebooks inside the folder `experiments`.
-
-Results
-~~~~~~~~~~
-
-Results on test set and logic formulas will be saved in the folder `experiments/results`.
-
-Data
-~~~~~~~~~~
-
-The original datasets can be downloaded from the links provided in the supplementary material of the paper.
+Real-world datasets can be downloaded from the links provided in the supplementary material of the paper.
 
 
 Theory
 --------
 Theoretical foundations can be found in the following papers.
 
+Concept Embedding Models::
+
+    @inproceedings{zarlengaconcept,
+      title={Concept Embedding Models: Beyond the Accuracy-Explainability Trade-Off},
+      author={Zarlenga, Mateo Espinosa and Barbiero, Pietro and Ciravegna, Gabriele and Marra, Giuseppe and Giannini, Francesco and Diligenti, Michelangelo and Shams, Zohreh and Precioso, Frederic and Melacci, Stefano and Weller, Adrian and others},
+      booktitle={Advances in Neural Information Processing Systems}
+    }
+
 Logic Explained Networks::
 
-    @article{ciravegna2021logic,
+    @article{ciravegna2023logic,
       title={Logic explained networks},
       author={Ciravegna, Gabriele and Barbiero, Pietro and Giannini, Francesco and Gori, Marco and Li{\'o}, Pietro and Maggini, Marco and Melacci, Stefano},
-      journal={arXiv preprint arXiv:2108.05149},
-      year={2021}
+      journal={Artificial Intelligence},
+      volume={314},
+      pages={103822},
+      year={2023},
+      publisher={Elsevier}
     }
 
 Entropy-based LENs::
 
-    @article{barbiero2021entropy,
-      title={Entropy-based Logic Explanations of Neural Networks},
+    @inproceedings{barbiero2022entropy,
+      title={Entropy-based logic explanations of neural networks},
       author={Barbiero, Pietro and Ciravegna, Gabriele and Giannini, Francesco and Li{\'o}, Pietro and Gori, Marco and Melacci, Stefano},
-      journal={arXiv preprint arXiv:2106.06804},
-      year={2021}
+      booktitle={Proceedings of the AAAI Conference on Artificial Intelligence},
+      volume={36},
+      number={6},
+      pages={6046--6054},
+      year={2022}
     }
 
 Psi network ("learning of constraints")::
@@ -220,6 +306,8 @@ Authors
 -------
 
 * `Pietro Barbiero <http://www.pietrobarbiero.eu/>`__, University of Cambridge, UK.
+* Mateo Espinosa Zarlenga, University of Cambridge, UK.
+* Steve Azzolin, University of Trento, IT.
 * Francesco Giannini, University of Florence, IT.
 * Gabriele Ciravegna, University of Florence, IT.
 * Dobrik Georgiev, University of Cambridge, UK.
@@ -228,7 +316,7 @@ Authors
 Licence
 -------
 
-Copyright 2020 Pietro Barbiero, Francesco Giannini, Gabriele Ciravegna, and Dobrik Georgiev.
+Copyright 2020 Pietro Barbiero, Mateo Espinosa Zarlenga, Steve Azzolin, Francesco Giannini, Gabriele Ciravegna, and Dobrik Georgiev.
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may
 not use this file except in compliance with the License. You may obtain

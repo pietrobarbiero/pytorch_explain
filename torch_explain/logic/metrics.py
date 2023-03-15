@@ -45,7 +45,7 @@ def test_explanation(formula: str, x: torch.Tensor, y: torch.Tensor, target_clas
         return accuracy, predictions
     
 
-def test_explanations(formulas: str, x: torch.Tensor, y: torch.Tensor, mask: torch.Tensor = None,
+def test_explanations(formulas: List[str], x: torch.Tensor, y: torch.Tensor, mask: torch.Tensor = None,
                       threshold: float = 0.5, material: bool = False) -> Tuple[float, torch.Tensor]:
     """
     Tests all together the logic formulas of different classes.
@@ -70,7 +70,7 @@ def test_explanations(formulas: str, x: torch.Tensor, y: torch.Tensor, mask: tor
     
     # get predictions using sympy
     class_predictions = torch.zeros(len(formulas), x.shape[0])
-    for i , formula in enumerate(formulas):
+    for i, formula in enumerate(formulas):
         explanation = to_dnf(formula)
         fun = lambdify(concept_list, explanation, 'numpy')
         

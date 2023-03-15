@@ -169,6 +169,32 @@ class TestTemplateObject(unittest.TestCase):
         print()
         print(local_exp)
 
+        explanations, local_exp = entropy.explain_classes(model, x, y, train_mask, test_mask,
+                                                          c_threshold=0.5, y_threshold=0., verbose=True,
+                                                          concept_names=concept_names, class_names=class_names,
+                                                          material=True, good_bad_terms=False, max_accuracy=False,
+                                                          try_all=True)
+        print(explanations)
+        print()
+        print(local_exp)
+
+        explanations, local_exp = entropy.explain_classes(model, x, y, train_mask, test_mask,
+                                                          c_threshold=0.5, y_threshold=0., verbose=True,
+                                                          concept_names=concept_names, class_names=class_names,
+                                                          material=True, good_bad_terms=False, max_accuracy=False,
+                                                          simplify=True)
+        print(explanations)
+        print()
+        print(local_exp)
+
+        te.logic.metrics.test_explanations(['feature0000000001 & ~feature0000000000 & ~feature0000000002 & ~feature0000000003'], x, y)
+        te.logic.metrics.test_explanations(['feature0000000001 & ~feature0000000000 & ~feature0000000002 & ~feature0000000003'], x, y, mask=[0, 1, 2])
+        te.logic.metrics.test_explanations(['feature0000000001 & ~feature0000000000 & ~feature0000000002 & ~feature0000000003'], x, y, mask=[0, 1, 2], threshold=0)
+
+        el = te.nn.EntropyLinear(x.shape[1], 20, n_classes=y1h.shape[1], bias=False, remove_attention=True)
+        el(x)
+        el.extra_repr()
+
         return
 
     # def test_entropy_gnn(self):

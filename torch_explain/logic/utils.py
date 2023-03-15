@@ -1,4 +1,3 @@
-import copy
 from typing import List
 import torch
 from sympy import lambdify, sympify
@@ -24,7 +23,7 @@ def replace_names(explanation: str, concept_names: List[str]) -> str:
     return explanation
 
 
-def get_predictions(formula: str, x: torch.Tensor, target_class: int, threshold: float = 0.5):
+def get_predictions(formula: str, x: torch.Tensor, threshold: float = 0.5):
     """
     Tests a logic formula.
     :param formula: logic formula

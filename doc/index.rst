@@ -1,11 +1,18 @@
 PYTORCH EXPLAIN DOCUMENTATION
 ===============================
 
-`PyTorch, Explain!` is an extension library for PyTorch to develop
-explainable deep learning models called Logic Explained Networks (LENs).
 
-It consists of various methods for explainability from a variety of published papers, including the APIs
-required to get first-order logic explanations from deep neural networks.
+`PyTorch, Explain!` is an extension library for PyTorch to develop
+explainable deep learning models going beyond the current accuracy-explainability trade-off.
+
+The library includes a set of tools to develop:
+
+* Concept Embedding Models (CEMs): a class of concept-based models going
+  **beyond the current accuracy-explainability trade-off**;
+* Logic Explained Networks (LENs): a class of concept-based models generating
+  accurate compound logic explanations for their predictions
+  **without the need for a post-hoc explainer**.
+
 
 Quick start
 -----------
@@ -30,7 +37,8 @@ The source code and minimal working examples can be found on
     :maxdepth: 2
 
     user_guide/installation
-    user_guide/tutorial
+    user_guide/tutorial_lens
+    user_guide/tutorial_cem
     user_guide/contributing
     user_guide/running_tests
 
@@ -40,13 +48,13 @@ The source code and minimal working examples can be found on
 
     modules/logic/nn/entropy
     modules/logic/nn/psi
+    modules/logic/nn/utils
     modules/logic/metrics
     modules/logic/utils
     modules/nn/logic
     modules/nn/functional/loss
     modules/nn/functional/prune
     modules/nn/concepts
-    modules/models/explainer
 
 
 .. toctree::
@@ -65,21 +73,53 @@ Indices and tables
 * :ref:`search`
 
 
+Benchmark datasets
+-------------------------
+
+We provide a suite of 3 benchmark datasets to evaluate the performance of our models
+in the folder `torch_explain/datasets`. These 3 datasets were proposed as benchmarks
+for concept-based models in the paper "Concept Embedding Models: Beyond the Accuracy-Explainability Trade-Off".
+
+Real-world datasets can be downloaded from the links provided in the supplementary material of the paper.
+
+
 Theory
 --------
 Theoretical foundations can be found in the following papers.
 
-Entropy-based LENs::
+Concept Embedding Models::
 
-    @article{barbiero2021entropy,
-      title={Entropy-based Logic Explanations of Neural Networks},
-      author={Barbiero, Pietro and Ciravegna, Gabriele and Giannini, Francesco and Li{\'o}, Pietro and Gori, Marco and Melacci, Stefano},
-      journal={arXiv preprint arXiv:2106.06804},
-      year={2021}
+    @inproceedings{zarlengaconcept,
+      title={Concept Embedding Models: Beyond the Accuracy-Explainability Trade-Off},
+      author={Zarlenga, Mateo Espinosa and Barbiero, Pietro and Ciravegna, Gabriele and Marra, Giuseppe and Giannini, Francesco and Diligenti, Michelangelo and Shams, Zohreh and Precioso, Frederic and Melacci, Stefano and Weller, Adrian and others},
+      booktitle={Advances in Neural Information Processing Systems}
     }
 
+Logic Explained Networks::
 
-:math:`\psi` network ("learning of constraints")::
+    @article{ciravegna2023logic,
+      title={Logic explained networks},
+      author={Ciravegna, Gabriele and Barbiero, Pietro and Giannini, Francesco and Gori, Marco and Li{\'o}, Pietro and Maggini, Marco and Melacci, Stefano},
+      journal={Artificial Intelligence},
+      volume={314},
+      pages={103822},
+      year={2023},
+      publisher={Elsevier}
+    }
+
+Entropy-based LENs::
+
+    @inproceedings{barbiero2022entropy,
+      title={Entropy-based logic explanations of neural networks},
+      author={Barbiero, Pietro and Ciravegna, Gabriele and Giannini, Francesco and Li{\'o}, Pietro and Gori, Marco and Melacci, Stefano},
+      booktitle={Proceedings of the AAAI Conference on Artificial Intelligence},
+      volume={36},
+      number={6},
+      pages={6046--6054},
+      year={2022}
+    }
+
+Psi network ("learning of constraints")::
 
     @inproceedings{ciravegna2020constraint,
       title={A Constraint-Based Approach to Learning and Explanation.},
@@ -114,6 +154,8 @@ Authors
 -------
 
 * `Pietro Barbiero <http://www.pietrobarbiero.eu/>`__, University of Cambridge, UK.
+* Mateo Espinosa Zarlenga, University of Cambridge, UK.
+* Steve Azzolin, University of Trento, IT.
 * Francesco Giannini, University of Florence, IT.
 * Gabriele Ciravegna, University of Florence, IT.
 * Dobrik Georgiev, University of Cambridge, UK.
@@ -122,7 +164,7 @@ Authors
 Licence
 -------
 
-Copyright 2020 Pietro Barbiero, Francesco Giannini, Gabriele Ciravegna, and Dobrik Georgiev.
+Copyright 2020 Pietro Barbiero, Mateo Espinosa Zarlenga, Steve Azzolin, Francesco Giannini, Gabriele Ciravegna, and Dobrik Georgiev.
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may
 not use this file except in compliance with the License. You may obtain

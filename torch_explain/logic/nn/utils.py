@@ -5,7 +5,7 @@ import torch
 
 
 def _collect_parameters(model: torch.nn.Module,
-                       device: torch.device = torch.device('cpu')) -> Tuple[List[np.ndarray], List[np.ndarray]]:
+                        device: torch.device = torch.device('cpu')) -> Tuple[List[np.ndarray], List[np.ndarray]]:
     """
     Collect network parameters in two lists of numpy arrays.
 
