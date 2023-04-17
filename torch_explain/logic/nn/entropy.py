@@ -54,6 +54,9 @@ def explain_classes(model: torch.nn.Module, c: torch.Tensor, y: torch.Tensor,
     if val_mask is None:
         val_mask = train_mask
 
+    if test_mask is None:
+        test_mask = val_mask
+
     explanations = {}
     local_explanations = {}
     for class_id in range(y.shape[1]):

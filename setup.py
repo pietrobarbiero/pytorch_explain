@@ -12,7 +12,7 @@ with open(ver_file) as f:
     exec(f.read())
 
 DISTNAME = 'torch_explain'
-DESCRIPTION = 'PyTorch Explain: Logic Explained Networks in Python.'
+DESCRIPTION = 'PyTorch Explain: Explainable Deep Learning in Python.'
 with codecs.open('README.rst') as f:
     LONG_DESCRIPTION = f.read()
 MAINTAINER = 'P. Barbiero'
