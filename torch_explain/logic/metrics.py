@@ -69,8 +69,6 @@ def test_explanations(formulas: List[str], x: torch.Tensor, y: torch.Tensor, mas
     concept_list = [f"feature{i:010}" for i in range(x.shape[1])]
     
     # get predictions using sympy
-    global class_predictions  # remove
-    global class_predictions_filtered_by_pred
     class_predictions = torch.zeros(len(formulas), x.shape[0])
     for i, formula in enumerate(formulas):
         explanation = to_dnf(formula)
