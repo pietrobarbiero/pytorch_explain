@@ -47,11 +47,13 @@
 
 
 `PyTorch, Explain!` is an extension library for PyTorch to develop
-explainable deep learning models going beyond the current accuracy-explainability trade-off.
+explainable deep learning models going beyond the current accuracy-interpretability trade-off.
 
 The library includes a set of tools to develop:
 
 
+* Deep Concept Reasoner (Deep CoRe): an interpretable concept-based model going
+  **beyond the current accuracy-interpretability trade-off**;
 * Concept Embedding Models (CEMs): a class of concept-based models going
   **beyond the current accuracy-explainability trade-off**;
 * Logic Explained Networks (LENs): a class of concept-based models generating
@@ -62,6 +64,7 @@ Table of Content
 -----------------
 * `Quick start <https://github.com/pietrobarbiero/pytorch_explain#quick-start>`_
 * `Quick tutorial on Concept Embedding Models <https://github.com/pietrobarbiero/pytorch_explain#quick-tutorial-on-concept-embedding-models>`_
+* `Quick tutorial on Deep Concept Reasoning <https://github.com/pietrobarbiero/pytorch_explain#quick-tutorial-on-deep-concept-reasoning>`_
 * `Quick tutorial on Logic Explained Networks <https://github.com/pietrobarbiero/pytorch_explain#quick-tutorial-on-logic-explained-networks>`_
 * `Benchmark datasets <https://github.com/pietrobarbiero/pytorch_explain#benchmark-datasets>`_
 * `Theory <https://github.com/pietrobarbiero/pytorch_explain#theory>`_
@@ -83,7 +86,7 @@ Quick tutorial on Concept Embedding Models
 -----------------------------------------------
 
 Using concept embeddings we can solve concept-based problems very efficiently!
-For this simple tutorial, let's approach the trigonometry benchmark dataset:
+For this simple tutorial, let's approach the XOR benchmark dataset:
 
 .. code:: python
 
@@ -93,7 +96,7 @@ For this simple tutorial, let's approach the trigonometry benchmark dataset:
     from sklearn.metrics import accuracy_score
     from sklearn.model_selection import train_test_split
 
-    x, c, y = datasets.trigonometry(500)
+    x, c, y = datasets.xor(500)
     x_train, x_test, c_train, c_test, y_train, y_test = train_test_split(x, c, y, test_size=0.33, random_state=42)
 
 We just need to define a task predictor and a concept encoder using a
@@ -104,6 +107,7 @@ concept embedding layer:
     import torch
     import torch_explain as te
 
+    embedding_size = 8
     concept_encoder = torch.nn.Sequential(
         torch.nn.Linear(x.shape[1], 10),
         torch.nn.LeakyReLU(),
@@ -127,7 +131,7 @@ on concepts and tasks:
         optimizer.zero_grad()
 
         # generate concept and task predictions
-        c_emb, c_pred = concept_embedder(x_train)
+        c_emb, c_pred = concept_encoder(x_train)
         y_pred = task_predictor(c_emb.reshape(len(c_emb), -1))
 
         # compute loss
@@ -142,7 +146,7 @@ Once trained we can check the performance of the model on the test set:
 
 .. code:: python
 
-    c_emb, c_pred = concept_embedder.forward(x_test)
+    c_emb, c_pred = concept_encoder.forward(x_test)
     y_pred = task_predictor(c_emb.reshape(len(c_emb), -1))
 
     task_accuracy = accuracy_score(y_test, y_pred > 0)
@@ -150,6 +154,67 @@ Once trained we can check the performance of the model on the test set:
 
 As you can see the performance of the model is now great as the task
 task accuracy is around ~100%.
+
+
+Quick tutorial on Deep Concept Reasoning
+-----------------------------------------------
+
+Using deep concept reasoning we can solve the same problem as above,
+but with an intrinsically interpretable model! In fact, Deep Concept Reasoners (Deep CoRes)
+make task predictions by means of interpretable logic rules using concept embeddings.
+
+Using the same example as before, we can just change the task predictor
+using a Deep CoRe layer:
+
+.. code:: python
+
+    from torch_explain.nn.concepts import ConceptReasoningLayer
+    import torch.nn.functional as F
+
+    y_train = F.one_hot(y_train.long().ravel()).float()
+    y_test = F.one_hot(y_test.long().ravel()).float()
+
+    task_predictor = ConceptReasoningLayer(embedding_size, y_train.shape[1])
+    model = torch.nn.Sequential(concept_encoder, task_predictor)
+
+
+We can now train the network by optimizing the cross entropy loss
+on concepts and tasks:
+
+.. code:: python
+
+    optimizer = torch.optim.AdamW(model.parameters(), lr=0.01)
+    loss_form = torch.nn.BCELoss()
+    model.train()
+    for epoch in range(501):
+        optimizer.zero_grad()
+
+        # generate concept and task predictions
+        c_emb, c_pred = concept_encoder(x_train)
+        y_pred = task_predictor(c_emb, c_pred)
+
+        # compute loss
+        concept_loss = loss_form(c_pred, c_train)
+        task_loss = loss_form(y_pred, y_train)
+        loss = concept_loss + 0.5*task_loss
+
+        loss.backward()
+        optimizer.step()
+
+Once trained the Deep CoRe layer can explain its predictions by
+providing both local and global logic rules:
+
+
+.. code:: python
+
+    local_explanations = task_predictor.explain(c_emb, c_pred, 'local')
+    global_explanations = task_predictor.explain(c_emb, c_pred, 'global')
+
+
+For global explanations, the reasoner will return a dictionary with entries such as
+``{'class': 'y_0', 'explanation': '~c_0 & ~c_1', 'count': 94}``, specifying
+for each logic rule, the task it is associated with and the number of samples
+associated with the explanation.
 
 
 Quick tutorial on Logic Explained Networks
@@ -239,13 +304,26 @@ Theory
 --------
 Theoretical foundations can be found in the following papers.
 
+Deep Concept Reasoning (recently accepted at ICML-23)::
+
+    @article{barbiero2023interpretable,
+      title={Interpretable Neural-Symbolic Concept Reasoning},
+      author={Barbiero, Pietro and Ciravegna, Gabriele and Giannini, Francesco and Zarlenga, Mateo Espinosa and Magister, Lucie Charlotte and Tonda, Alberto and Lio, Pietro and Precioso, Frederic and Jamnik, Mateja and Marra, Giuseppe},
+      journal={arXiv preprint arXiv:2304.14068},
+      year={2023}
+    }
+
 Concept Embedding Models::
 
-    @inproceedings{zarlengaconcept,
+    @article{espinosa2022concept,
       title={Concept Embedding Models: Beyond the Accuracy-Explainability Trade-Off},
-      author={Zarlenga, Mateo Espinosa and Barbiero, Pietro and Ciravegna, Gabriele and Marra, Giuseppe and Giannini, Francesco and Diligenti, Michelangelo and Shams, Zohreh and Precioso, Frederic and Melacci, Stefano and Weller, Adrian and others},
-      booktitle={Advances in Neural Information Processing Systems}
+      author={Espinosa Zarlenga, Mateo and Barbiero, Pietro and Ciravegna, Gabriele and Marra, Giuseppe and Giannini, Francesco and Diligenti, Michelangelo and Shams, Zohreh and Precioso, Frederic and Melacci, Stefano and Weller, Adrian and others},
+      journal={Advances in Neural Information Processing Systems},
+      volume={35},
+      pages={21400--21413},
+      year={2022}
     }
+
 
 Logic Explained Networks::
 
@@ -274,12 +352,15 @@ Entropy-based LENs::
 Psi network ("learning of constraints")::
 
     @inproceedings{ciravegna2020constraint,
-      title={A Constraint-Based Approach to Learning and Explanation.},
+      title={A constraint-based approach to learning and explanation},
       author={Ciravegna, Gabriele and Giannini, Francesco and Melacci, Stefano and Maggini, Marco and Gori, Marco},
-      booktitle={AAAI},
+      booktitle={Proceedings of the AAAI Conference on Artificial Intelligence},
+      volume={34},
+      number={04},
       pages={3658--3665},
       year={2020}
     }
+
 
 Learning with constraints::
 
@@ -307,6 +388,7 @@ Authors
 
 * `Pietro Barbiero <http://www.pietrobarbiero.eu/>`__, University of Cambridge, UK.
 * Mateo Espinosa Zarlenga, University of Cambridge, UK.
+* Giuseppe Marra, Katholieke Universiteit Leuven, BE.
 * Steve Azzolin, University of Trento, IT.
 * Francesco Giannini, University of Florence, IT.
 * Gabriele Ciravegna, University of Florence, IT.
@@ -316,7 +398,8 @@ Authors
 Licence
 -------
 
-Copyright 2020 Pietro Barbiero, Mateo Espinosa Zarlenga, Steve Azzolin, Francesco Giannini, Gabriele Ciravegna, and Dobrik Georgiev.
+Copyright 2020 Pietro Barbiero, Mateo Espinosa Zarlenga, Giuseppe Marra,
+Steve Azzolin, Francesco Giannini, Gabriele Ciravegna, and Dobrik Georgiev.
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may
 not use this file except in compliance with the License. You may obtain

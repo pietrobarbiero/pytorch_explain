@@ -3,10 +3,12 @@ PYTORCH EXPLAIN DOCUMENTATION
 
 
 `PyTorch, Explain!` is an extension library for PyTorch to develop
-explainable deep learning models going beyond the current accuracy-explainability trade-off.
+explainable deep learning models going beyond the current accuracy-interpretability trade-off.
 
 The library includes a set of tools to develop:
 
+* Deep Concept Reasoner (Deep CoRe): an interpretable concept-based model going
+  **beyond the current accuracy-interpretability trade-off**;
 * Concept Embedding Models (CEMs): a class of concept-based models going
   **beyond the current accuracy-explainability trade-off**;
 * Logic Explained Networks (LENs): a class of concept-based models generating
@@ -22,7 +24,7 @@ You can install ``torch_explain`` along with all its dependencies from
 
 .. code:: bash
 
-    pip install -r requirements.txt torch-explain
+    pip install torch-explain
 
 
 Source
@@ -39,6 +41,7 @@ The source code and minimal working examples can be found on
     user_guide/installation
     user_guide/tutorial_lens
     user_guide/tutorial_cem
+    user_guide/tutorial_dcr
     user_guide/contributing
     user_guide/running_tests
 
@@ -55,6 +58,7 @@ The source code and minimal working examples can be found on
     modules/nn/functional/loss
     modules/nn/functional/prune
     modules/nn/concepts
+    modules/nn/semantics
 
 
 .. toctree::
@@ -87,13 +91,26 @@ Theory
 --------
 Theoretical foundations can be found in the following papers.
 
+Deep Concept Reasoning::
+
+    @article{barbiero2023interpretable,
+      title={Interpretable Neural-Symbolic Concept Reasoning},
+      author={Barbiero, Pietro and Ciravegna, Gabriele and Giannini, Francesco and Zarlenga, Mateo Espinosa and Magister, Lucie Charlotte and Tonda, Alberto and Lio, Pietro and Precioso, Frederic and Jamnik, Mateja and Marra, Giuseppe},
+      journal={arXiv preprint arXiv:2304.14068},
+      year={2023}
+    }
+
 Concept Embedding Models::
 
-    @inproceedings{zarlengaconcept,
+    @article{espinosa2022concept,
       title={Concept Embedding Models: Beyond the Accuracy-Explainability Trade-Off},
-      author={Zarlenga, Mateo Espinosa and Barbiero, Pietro and Ciravegna, Gabriele and Marra, Giuseppe and Giannini, Francesco and Diligenti, Michelangelo and Shams, Zohreh and Precioso, Frederic and Melacci, Stefano and Weller, Adrian and others},
-      booktitle={Advances in Neural Information Processing Systems}
+      author={Espinosa Zarlenga, Mateo and Barbiero, Pietro and Ciravegna, Gabriele and Marra, Giuseppe and Giannini, Francesco and Diligenti, Michelangelo and Shams, Zohreh and Precioso, Frederic and Melacci, Stefano and Weller, Adrian and others},
+      journal={Advances in Neural Information Processing Systems},
+      volume={35},
+      pages={21400--21413},
+      year={2022}
     }
+
 
 Logic Explained Networks::
 
@@ -122,12 +139,15 @@ Entropy-based LENs::
 Psi network ("learning of constraints")::
 
     @inproceedings{ciravegna2020constraint,
-      title={A Constraint-Based Approach to Learning and Explanation.},
+      title={A constraint-based approach to learning and explanation},
       author={Ciravegna, Gabriele and Giannini, Francesco and Melacci, Stefano and Maggini, Marco and Gori, Marco},
-      booktitle={AAAI},
+      booktitle={Proceedings of the AAAI Conference on Artificial Intelligence},
+      volume={34},
+      number={04},
       pages={3658--3665},
       year={2020}
     }
+
 
 Learning with constraints::
 
@@ -155,6 +175,7 @@ Authors
 
 * `Pietro Barbiero <http://www.pietrobarbiero.eu/>`__, University of Cambridge, UK.
 * Mateo Espinosa Zarlenga, University of Cambridge, UK.
+* Giuseppe Marra, Katholieke Universiteit Leuven, BE.
 * Steve Azzolin, University of Trento, IT.
 * Francesco Giannini, University of Florence, IT.
 * Gabriele Ciravegna, University of Florence, IT.
@@ -164,7 +185,8 @@ Authors
 Licence
 -------
 
-Copyright 2020 Pietro Barbiero, Mateo Espinosa Zarlenga, Steve Azzolin, Francesco Giannini, Gabriele Ciravegna, and Dobrik Georgiev.
+Copyright 2020 Pietro Barbiero, Mateo Espinosa Zarlenga, Giuseppe Marra,
+Steve Azzolin, Francesco Giannini, Gabriele Ciravegna, and Dobrik Georgiev.
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may
 not use this file except in compliance with the License. You may obtain

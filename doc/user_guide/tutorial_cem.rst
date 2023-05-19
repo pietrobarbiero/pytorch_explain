@@ -1,8 +1,8 @@
 Concept Embeddings tutorial
 ==========================================
 
-Concept Bottleneck Models
-----------------------------
+Limits of Concept Bottleneck Models
+------------------------------------------
 
 For this simple tutorial, let's approach
 the trigonometry benchmark dataset with a concept bottleneck model:
@@ -24,7 +24,7 @@ a task predictor to map concepts to task predictions:
 
 .. code:: python
 
-    concept_embedder = torch.nn.Sequential(
+    concept_encoder = torch.nn.Sequential(
         torch.nn.Linear(x.shape[1], 10),
         torch.nn.LeakyReLU(),
         torch.nn.Linear(10, 8),
@@ -35,7 +35,7 @@ a task predictor to map concepts to task predictions:
     task_predictor = torch.nn.Sequential(
         torch.nn.Linear(c.shape[1], 1),
     )
-    model = torch.nn.Sequential(concept_embedder, task_predictor)
+    model = torch.nn.Sequential(concept_encoder, task_predictor)
 
 We can now train the network by optimizing the cross entropy loss
 on both concepts and tasks:
@@ -50,7 +50,7 @@ on both concepts and tasks:
         optimizer.zero_grad()
 
         # generate concept and task predictions
-        c_pred = concept_embedder(x_train)
+        c_pred = concept_encoder(x_train)
         y_pred = task_predictor(c_pred)
 
         # update loss
@@ -65,11 +65,11 @@ Once trained we can check the performance of the model on the test set:
 
 .. code:: python
 
-    c_pred = concept_embedder(x_test)
+    c_pred = concept_encoder(x_test)
     y_pred = task_predictor(c_pred)
 
-    task_accuracy = accuracy_score(y_test, y_pred > 0)
     concept_accuracy = accuracy_score(c_test, c_pred > 0.5)
+    task_accuracy = accuracy_score(y_test, y_pred > 0)
 
 As you can see the performance of the model is not great as the task
 task accuracy is around ~80%. Can we do better?
@@ -87,6 +87,7 @@ concept embedding layer:
     import torch
     import torch_explain as te
 
+    embedding_size = 8
     concept_encoder = torch.nn.Sequential(
         torch.nn.Linear(x.shape[1], 10),
         torch.nn.LeakyReLU(),
@@ -110,7 +111,7 @@ on concepts and tasks:
         optimizer.zero_grad()
 
         # generate concept and task predictions
-        c_emb, c_pred = concept_embedder(x_train)
+        c_emb, c_pred = concept_encoder(x_train)
         y_pred = task_predictor(c_emb.reshape(len(c_emb), -1))
 
         # compute loss
@@ -125,11 +126,11 @@ Once trained we can check the performance of the model on the test set:
 
 .. code:: python
 
-    c_emb, c_pred = concept_embedder.forward(x_test)
+    c_emb, c_pred = concept_encoder.forward(x_test)
     y_pred = task_predictor(c_emb.reshape(len(c_emb), -1))
 
-    task_accuracy = accuracy_score(y_test, y_pred > 0)
     concept_accuracy = accuracy_score(c_test, c_pred > 0.5)
+    task_accuracy = accuracy_score(y_test, y_pred > 0)
 
 As you can see the performance of the model is now great as the task
 task accuracy is around ~100%.
