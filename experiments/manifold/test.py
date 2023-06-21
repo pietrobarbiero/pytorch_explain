@@ -13,6 +13,7 @@ m = ManifoldRelationalDCR(input_features=2, emb_size=3, manifold_arity=2, num_cl
 X = torch.tensor(X, dtype=torch.float)
 y, body_index, head_index, relation_labels, task_labels = (torch.tensor(i) for i in (y, body_index, head_index, relation_labels, task_labels))
 c, t = m(X,body_index, head_index)
+# Losses should match the following vectors (now dummy comparison, just for shape)
 print(c == torch.eye(2)[y])
 print(t == torch.eye(2)[task_labels])
 
@@ -27,6 +28,7 @@ m = ManifoldRelationalDCR(input_features=2, emb_size=3, manifold_arity=2, num_cl
 X = torch.tensor(X, dtype=torch.float)
 y, body_index, head_index, relation_labels, task_labels = (torch.tensor(i) for i in (y, body_index, head_index, relation_labels, task_labels))
 c, r, t = m(X,body_index, head_index)
+# Losses should match the following vectors (now dummy comparison, just for shape)
 print(c == torch.eye(2)[y])
 print(t == torch.eye(2)[task_labels])
 print(r == np.reshape(relation_labels, [-1,1]))
