@@ -11,20 +11,21 @@ def softselect(values, temperature):
 
 
 class ConceptReasoningLayer(torch.nn.Module):
-    def __init__(self, emb_size, n_classes, logic: Logic = GodelTNorm(), temperature: float = 100.):
+    def __init__(self, emb_size, n_concepts, n_classes, logic: Logic = GodelTNorm(), temperature: float = 100.):
         super().__init__()
         self.emb_size = emb_size
+        self.n_concepts = n_concepts
         self.n_classes = n_classes
         self.logic = logic
         self.filter_nn = torch.nn.Sequential(
             torch.nn.Linear(emb_size, emb_size),
             torch.nn.LeakyReLU(),
-            torch.nn.Linear(emb_size, n_classes),
+            torch.nn.Linear(emb_size, n_concepts * n_classes),
         )
         self.sign_nn = torch.nn.Sequential(
             torch.nn.Linear(emb_size, emb_size),
             torch.nn.LeakyReLU(),
-            torch.nn.Linear(emb_size, n_classes),
+            torch.nn.Linear(emb_size, n_concepts * n_classes),
         )
         self.temperature = temperature
 
@@ -35,6 +36,7 @@ class ConceptReasoningLayer(torch.nn.Module):
             # compute attention scores to build logic sentence
             # each attention score will represent whether the concept should be active or not in the logic sentence
             sign_attn = torch.sigmoid(self.sign_nn(x))
+            sign_attn = sign_attn.view(sign_attn.shape[0], self.n_concepts, self.n_classes)
 
         # attention scores need to be aligned with predicted concept truth values (attn <-> values)
         # (not A or V) and (A or not V) <-> (A <-> V)
@@ -42,7 +44,9 @@ class ConceptReasoningLayer(torch.nn.Module):
 
         if filter_attn is None:
             # compute attention scores to identify only relevant concepts for each class
-            filter_attn = softselect(self.filter_nn(x), self.temperature)
+            filtr = self.filter_nn(x)
+            filtr = filtr.view(filtr.shape[0], self.n_concepts, self.n_classes)
+            filter_attn = softselect(filtr, self.temperature)
 
         # filter value
         # filtered implemented as "or(a, not b)", corresponding to "b -> a"
