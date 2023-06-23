@@ -1,16 +1,9 @@
-import random
-from pathlib import Path
-from torchvision import transforms as transforms
 from itertools import product
 import sklearn as skl
 from sklearn import datasets
 import numpy as np
-import matplotlib.pyplot as plt
+import random
 
-transform = transforms.Compose(
-    [transforms.ToTensor(), transforms.Normalize((0.5,), (0.5,))]
-)
-data_root = Path(__file__).parent / ".." / "data"
 
 
 def manifold_toy_dataset(name, threshold = 0.5, n_samples = 100, perc_super = 0.2, only_on_manifold = True):
@@ -45,8 +38,3 @@ def manifold_toy_dataset(name, threshold = 0.5, n_samples = 100, perc_super = 0.
     head_index = groundings[:, 1:2]
 
     return X,y, body_index, head_index, relation_labels, task_labels
-
-if __name__ == '__main__':
-    X,y, body_index, head_index, relation_labels, task_labels =  manifold_toy_dataset("moon")
-    plt.scatter(X[:,0], X[:,1])
-    plt.show()
