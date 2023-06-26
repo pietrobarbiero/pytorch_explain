@@ -76,20 +76,12 @@ def sudoku(n):
         # print(labels[-1])
 
         for i in board:
-            images[-1].append(images_per_label[i].pop())
+            images[-1].append(torch.unsqueeze(images_per_label[i].pop(),dim=0))
             labels_images[-1].append(i)
         images[-1] = torch.stack(images[-1], dim=0)
 
 
-        # manifolds = {
-        #     "columns": [(sudoku, i, *(column + sudoku)) for sudoku, (i, column) in product(sudokus, enumerate(columns))],
-        #     "rows": [(sudoku, i, *(column + sudoku)) for sudoku, (i, column) in product(sudokus, enumerate(rows))],
-        #     "squares": [(sudoku, i, *(column + sudoku)) for sudoku, (i, column) in product(sudokus, enumerate(squares))],
-        # }
-
-    manifolds = [(sudoku, i, *(column + sudoku)) for sudoku, (i, column) in product(sudokus, enumerate(columns))] + \
-                [(sudoku, i, *(column + sudoku)) for sudoku, (i, column) in product(sudokus, enumerate(rows))] + \
-                [(sudoku, i, *(column + sudoku)) for sudoku, (i, column) in product(sudokus, enumerate(squares))]
+    manifolds = np.concatenate((columns,rows,squares), axis=0)
     tasks = labels
 
     return images, labels_images, manifolds, tasks
