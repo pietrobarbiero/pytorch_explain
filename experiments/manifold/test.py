@@ -1,6 +1,7 @@
 import torch
 import matplotlib.pyplot as plt
-from datasets import manifold_toy_dataset, sudoku
+
+from datasets.toy_manifold import manifold_toy_dataset
 from model_sudoku import SudokuRelationalDCR
 from model import ManifoldRelationalDCR
 import numpy as np
@@ -19,7 +20,7 @@ class ManifoldTest(unittest.TestCase):
 
         X = torch.tensor(X, dtype=torch.float)
         y, body_index, head_index, relation_labels, task_labels = (torch.tensor(i) for i in (y, body_index, head_index, relation_labels, task_labels))
-        c, t = m(X,body_index, head_index)
+        c, t, e = m(X, body_index, head_index)
         # Losses should match the following vectors (now dummy comparison, just for shape)
         return c.shape == torch.eye(2)[y].shape and t.shape == torch.eye(2)[task_labels].shape
 
@@ -34,7 +35,7 @@ class ManifoldTest(unittest.TestCase):
 
         X = torch.tensor(X, dtype=torch.float)
         y, body_index, head_index, relation_labels, task_labels = (torch.tensor(i) for i in (y, body_index, head_index, relation_labels, task_labels))
-        c, r, t = m(X,body_index, head_index)
+        c, r, t, e = m(X,body_index, head_index)
         # Losses should match the following vectors (now dummy comparison, just for shape)
         return c.shape == torch.eye(2)[y].shape and t.shape == torch.eye(2)[task_labels].shape and r == np.reshape(relation_labels, [-1,1])
 
@@ -45,6 +46,6 @@ class ManifoldTest(unittest.TestCase):
 
         X = torch.stack(X, dim=0)
         y, manifolds, task_labels = (torch.tensor(i) for i in (y, manifolds, task_labels))
-        c, t = m(X,manifolds)
+        c, t, e = m(X,manifolds)
 
         return c.shape == torch.eye(2)[y].shape and t.shape == torch.eye(2)[task_labels].shape
