@@ -12,8 +12,8 @@ import pytorch_lightning as pl
 
 def main():
 
-    epochs = 200
-    learning_rate = 0.001
+    epochs = 500
+    learning_rate = 0.01
     batch_size = 32
     limit_batches = 1.0
     emb_size = 20
@@ -40,7 +40,8 @@ def main():
     test_dl = torch.utils.data.DataLoader(test_data, batch_size, shuffle=False, pin_memory=True)
 
     model = ManifoldRelationalDCR(input_features=2, emb_size=3, manifold_arity=2,
-                                  num_classes=2, predict_relation=False)
+                                  num_classes=2, predict_relation=False,
+                                  set_level_rules=True, learning_rate=learning_rate)
 
     # if not os.path.exists(model_path):
     print(f'Running epochs={epochs}, batch_size={batch_size}, learning_rate={learning_rate}')

@@ -55,18 +55,22 @@ class TupleEmbedder(nn.Module):
 
 
 class ManifoldRelationalDCR(pl.LightningModule):
-    def __init__(self, input_features, emb_size, manifold_arity, num_classes, predict_relation = False, concept_names=None, explanations=None, learning_rate=0.01,  temperature=10, verbose: bool = False, gpu=True):
+    def __init__(self, input_features, emb_size, manifold_arity, num_classes,
+                 predict_relation = False, set_level_rules=False,
+                 concept_names=None, explanations=None, learning_rate=0.01,  temperature=10,
+                 verbose: bool = False, gpu=True):
         super().__init__()
         self.image_embedder = ImageEmbedder(input_features, emb_size)
         self.concept_classifier = ConceptClassifier(emb_size, num_classes=num_classes)
         self.tuple_creator = TupleCreator()
         self.emb_size = emb_size
         self.predict_relation = predict_relation
+        self.set_level_rules = set_level_rules
         if self.predict_relation:
             self.relation_classifier = ConceptClassifier(emb_size*2, num_classes=1) #only-binary TODO: n-ary, multiple relations
             self.reasoner = ConceptReasoningLayer(emb_size*manifold_arity, n_concepts=num_classes+1, n_classes = num_classes) # +1 for the relation
         else:
-            self.reasoner = ConceptReasoningLayer(emb_size*manifold_arity, n_concepts=num_classes, n_classes = num_classes)
+            self.reasoner = ConceptReasoningLayer(emb_size * manifold_arity, n_concepts=num_classes, n_classes=num_classes, set_level_rules=set_level_rules)
 
 
         self.concept_names = concept_names
