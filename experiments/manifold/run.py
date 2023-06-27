@@ -19,6 +19,8 @@ def main():
     emb_size = 20
     number_digits = 2
     gpu = False
+    crisp = True
+    set_level_rules = False
     dataset_name = "moon"
 
     results_dir = f"./results/"
@@ -39,9 +41,9 @@ def main():
     train_dl = torch.utils.data.DataLoader(train_data, batch_size, shuffle=True, pin_memory=True)
     test_dl = torch.utils.data.DataLoader(test_data, batch_size, shuffle=False, pin_memory=True)
 
-    model = ManifoldRelationalDCR(input_features=2, emb_size=3, manifold_arity=2,
-                                  num_classes=2, predict_relation=False,
-                                  set_level_rules=True, learning_rate=learning_rate)
+    model = ManifoldRelationalDCR(input_features=2, emb_size=8, manifold_arity=2,
+                                  num_classes=2, predict_relation=False, crisp=crisp,
+                                  set_level_rules=set_level_rules, learning_rate=learning_rate)
 
     # if not os.path.exists(model_path):
     print(f'Running epochs={epochs}, batch_size={batch_size}, learning_rate={learning_rate}')
