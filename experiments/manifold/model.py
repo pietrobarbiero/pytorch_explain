@@ -32,7 +32,7 @@ class ConceptClassifier(nn.Module):
     def forward(self, x):
         x = self.encoder(x)
         if self.crisp:
-            x = F.gumbel_softmax(x, tau=100, hard=True, dim=-1)
+            x = F.gumbel_softmax(x, tau=100, hard=False, dim=-1)
         else:
             x = F.softmax(x, dim=-1)
         return x

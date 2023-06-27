@@ -6,18 +6,20 @@ from datasets.toy_manifold import manifold_toy_dataset
 from model import ManifoldRelationalDCR
 import torch
 import os
-import torch.nn.functional as F
 import pytorch_lightning as pl
 
 
 def main():
 
+    random_seed = 42
     epochs = 500
     learning_rate = 0.01
     batch_size = 32
     limit_batches = 1.0
-    emb_size = 20
-    number_digits = 2
+    input_features = 2
+    emb_size = 5
+    manifold_arity = 2
+    num_classes = 2
     gpu = False
     crisp = True
     set_level_rules = False
@@ -27,14 +29,14 @@ def main():
     os.makedirs(results_dir, exist_ok=True)
     model_path = os.path.join(results_dir, 'model.pt')
 
-    train_data = manifold_toy_dataset(dataset_name, only_on_manifold=True, random_seed=42, train=True)
-    test_data = manifold_toy_dataset(dataset_name, only_on_manifold=True, random_seed=84, train=False)
+    train_data = manifold_toy_dataset(dataset_name, only_on_manifold=True, random_seed=random_seed, train=True)
+    test_data = manifold_toy_dataset(dataset_name, only_on_manifold=True, random_seed=2*random_seed, train=False)
 
     train_dl = torch.utils.data.DataLoader(train_data, batch_size, shuffle=True, pin_memory=True)
     test_dl = torch.utils.data.DataLoader(test_data, batch_size, shuffle=False, pin_memory=True)
 
-    model = ManifoldRelationalDCR(input_features=2, emb_size=8, manifold_arity=2,
-                                  num_classes=2, predict_relation=False, crisp=crisp,
+    model = ManifoldRelationalDCR(input_features=input_features, emb_size=emb_size, manifold_arity=manifold_arity,
+                                  num_classes=num_classes, predict_relation=False, crisp=crisp,
                                   set_level_rules=set_level_rules, learning_rate=learning_rate)
 
     # if not os.path.exists(model_path):
