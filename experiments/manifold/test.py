@@ -7,17 +7,6 @@ import numpy as np
 
 import unittest
 
-
-def group_by(t, dim):
-    ids = t[:, dim].unique()
-    mask = t[:, None, dim] == ids
-    l = []
-    for i, id_rel in enumerate(ids):
-        temp = t[torch.argwhere(mask[:, i])]
-        temp = temp.squeeze(1)
-        l.append(temp)
-    return l
-
 class ManifoldTest(unittest.TestCase):
 
     def test_manifold_with_given_relation(self):
@@ -53,23 +42,44 @@ class ManifoldTest(unittest.TestCase):
 
     def test_tuple_creator_boolean_mask(self):
 
-        X = np.random.randint(size = [ 10, 4], low = 0, high = 1)
+        def group_by_no_for(t, dim):
+            _, indices = torch.sort(t[:, dim])
+            t = t[indices]
+            ids = t[:, dim].unique()
+            mask = t[:, None, dim] == ids
+            splits = torch.argmax(mask.float(), dim=0)
+            r = torch.tensor_split(t, splits[1:])
+            return r
+
+        X = np.random.random(size=[10, 4])
 
         # id_atom, id_rel, id_const, id_pos
-        indices = [[0, 42, 0, 0],       #r(a,b) r a 0
-                   [0, 42, 1, 1],       #r(a,b) r b 1
-                   [1, 42, 0, 0],       #r(a,c) r a 0
-                   [1, 42, 2, 1],       #r(a,c) r c 1
-                   [2, 43, 0, 0],       #q(a) q a 0
-                   [3, 43, 2, 0]]     #q(c) q c 0
+        indices = [[0, 42, 0, 0],  # r(a,b) r a 0
+                   [0, 42, 1, 1],  # r(a,b) r b 1
+                   [1, 42, 2, 1],  # r(a,c) r c 1
+                   [2, 43, 0, 0],  # q(a) q a 0
+                   [1, 42, 0, 0],  # r(a,c) r a 0
+                   [3, 43, 2, 0]]  # q(c) q c 0
 
         X = torch.tensor(X)
         indices = torch.tensor(indices)
 
+        # We need them to be sorted first, by relation (column=0) and, then, by position (columsn=3)
+        indices = indices[torch.argsort(indices[:, 3])]
+        indices = indices[torch.argsort(indices[:, 1], stable=True)]
 
+        split_per_rels = group_by_no_for(indices, dim=1)
+        for rel in split_per_rels:
+            rel_id = rel[0, 1]
+            tuples = group_by_no_for(rel, dim=0)
+            tuples = torch.stack(tuples, dim=0)
+            atom_ids = tuples[:, 0, 0]
+            tuples = tuples[:, :, 2]
+            embed_tuple = X[tuples].view(tuples.shape[0], -1)
 
-        split_per_rels = group_by(indices, dim=1)
-        for sp in split_per_rels:
-            print(sp)
-            print(torch.stack(group_by(sp, 0),dim=0))
+            print()
+            print("Id relation", rel_id)
+            print("Id atoms corresponding to tuples", atom_ids)
+            print("Id constant in tuples", tuples)
+            print("Embedding tuple", embed_tuple)
 
