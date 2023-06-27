@@ -27,16 +27,8 @@ def main():
     os.makedirs(results_dir, exist_ok=True)
     model_path = os.path.join(results_dir, 'model.pt')
 
-    X, y, body_index, head_index, relation_labels, task_labels = manifold_toy_dataset(dataset_name, only_on_manifold=True)
-    X = torch.tensor(X, dtype=torch.float)
-    y, body_index, head_index, relation_labels, task_labels = (torch.tensor(i) for i in (y, body_index, head_index, relation_labels, task_labels))
-
-    c_train = F.one_hot(y.long().ravel()).float()
-    y_train = F.one_hot(task_labels.long().ravel()).float()
-
-    X, c_train, body_index, head_index, relation_labels, y_train = (i.unsqueeze(0) for i in (X, c_train, body_index, head_index, relation_labels, y_train))
-    train_data = TensorDataset(X, c_train, body_index, head_index, relation_labels, y_train)
-    test_data = TensorDataset(X, c_train, body_index, head_index, relation_labels, y_train)
+    train_data = manifold_toy_dataset(dataset_name, only_on_manifold=True, random_seed=42, train=True)
+    test_data = manifold_toy_dataset(dataset_name, only_on_manifold=True, random_seed=84, train=False)
 
     train_dl = torch.utils.data.DataLoader(train_data, batch_size, shuffle=True, pin_memory=True)
     test_dl = torch.utils.data.DataLoader(test_data, batch_size, shuffle=False, pin_memory=True)
@@ -54,7 +46,7 @@ def main():
                          limit_val_batches=limit_batches,
                          logger=logger)
     trainer.fit(model=model, train_dataloaders=train_dl, val_dataloaders=train_dl)
-    trainer.test(model=model, dataloaders=train_dl)
+    trainer.test(model=model, dataloaders=test_dl)
     torch.save(model.state_dict(), model_path)
 
 
