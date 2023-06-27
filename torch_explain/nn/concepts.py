@@ -11,21 +11,35 @@ def softselect(values, temperature):
 
 
 class ConceptReasoningLayer(torch.nn.Module):
-    def __init__(self, emb_size, n_concepts, n_classes, logic: Logic = GodelTNorm(), temperature: float = 100.):
+    def __init__(self, emb_size, n_concepts, n_classes, logic: Logic = GodelTNorm(), temperature: float = 100., set_level_rules: bool = False):
         super().__init__()
         self.emb_size = emb_size
         self.n_concepts = n_concepts
         self.n_classes = n_classes
         self.logic = logic
+        self.set_level_rules = set_level_rules
+        self.emb_size_after_pool = emb_size
+        if self.set_level_rules:
+            self.emb_size_after_pool = emb_size * 4
         self.filter_nn = torch.nn.Sequential(
-            torch.nn.Linear(emb_size, emb_size),
+            torch.nn.Linear(self.emb_size_after_pool, emb_size),
             torch.nn.LeakyReLU(),
             torch.nn.Linear(emb_size, n_concepts * n_classes),
         )
         self.sign_nn = torch.nn.Sequential(
-            torch.nn.Linear(emb_size, emb_size),
+            torch.nn.Linear(self.emb_size_after_pool, emb_size),
             torch.nn.LeakyReLU(),
             torch.nn.Linear(emb_size, n_concepts * n_classes),
+        )
+        self.filter_nn_before_pool = torch.nn.Sequential(
+            torch.nn.Linear(emb_size, emb_size),
+            torch.nn.LeakyReLU(),
+            torch.nn.Linear(emb_size, emb_size),
+        )
+        self.sign_nn_before_pool = torch.nn.Sequential(
+            torch.nn.Linear(emb_size, emb_size),
+            torch.nn.LeakyReLU(),
+            torch.nn.Linear(emb_size, emb_size),
         )
         self.temperature = temperature
 
@@ -33,10 +47,30 @@ class ConceptReasoningLayer(torch.nn.Module):
         values = c.unsqueeze(-1).repeat(1, 1, self.n_classes)
 
         if sign_attn is None:
+            sign_emb = filter_emb = x
+            if self.set_level_rules:
+                sign_emb = self.sign_nn_before_pool(x)
+                sign_emb = torch.concat([
+                    torch.sum(sign_emb, dim=0, keepdim=True),
+                    torch.mean(sign_emb, dim=0, keepdim=True),
+                    torch.std(sign_emb, dim=0, keepdim=True),
+                    torch.max(sign_emb, dim=0, keepdim=True)[0],
+                ], dim=1)
+                filter_emb = self.filter_nn_before_pool(x)
+                filter_emb = torch.concat([
+                    torch.sum(filter_emb, dim=0, keepdim=True),
+                    torch.mean(filter_emb, dim=0, keepdim=True),
+                    torch.std(filter_emb, dim=0, keepdim=True),
+                    torch.max(filter_emb, dim=0, keepdim=True)[0],
+                ], dim=1)
+
             # compute attention scores to build logic sentence
             # each attention score will represent whether the concept should be active or not in the logic sentence
-            sign_attn = torch.sigmoid(self.sign_nn(x))
+            sign_attn = torch.sigmoid(self.sign_nn(sign_emb))
             sign_attn = sign_attn.view(sign_attn.shape[0], self.n_concepts, self.n_classes)
+
+            if self.set_level_rules:
+                sign_attn = sign_attn.expand(len(values), -1, -1)
 
         # attention scores need to be aligned with predicted concept truth values (attn <-> values)
         # (not A or V) and (A or not V) <-> (A <-> V)
@@ -44,9 +78,12 @@ class ConceptReasoningLayer(torch.nn.Module):
 
         if filter_attn is None:
             # compute attention scores to identify only relevant concepts for each class
-            filtr = self.filter_nn(x)
+            filtr = self.filter_nn(filter_emb)
             filtr = filtr.view(filtr.shape[0], self.n_concepts, self.n_classes)
             filter_attn = softselect(filtr, self.temperature)
+
+            if self.set_level_rules:
+                filter_attn = sign_attn.expand(len(sign_terms), -1, -1)
 
         # filter value
         # filtered implemented as "or(a, not b)", corresponding to "b -> a"

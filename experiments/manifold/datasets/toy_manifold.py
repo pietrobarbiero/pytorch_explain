@@ -1,22 +1,25 @@
 from itertools import product
 import sklearn as skl
+import torch
 from sklearn import datasets
 import numpy as np
 import random
+import torch.nn.functional as F
+from torch.utils.data import TensorDataset
 
 
-
-def manifold_toy_dataset(name, threshold = 0.5, n_samples = 100, perc_super = 0.2, only_on_manifold = True):
+def manifold_toy_dataset(name, threshold = 0.5, n_samples = 100, perc_super = 0.2,
+                         only_on_manifold = True, random_seed = 42, train = True):
 
     if name == "moon":
-        X, y = datasets.make_moons(n_samples)
+        X, y = datasets.make_moons(n_samples, random_state=random_seed)
     else:
         raise Exception("Dataset %s unknowns." % name)
 
-
-    supervised = random.sample(range(len(X)), int(len(X)*perc_super))
-    X = X[supervised]
-    y = y[supervised]
+    if train:
+        supervised = np.random.RandomState(random_seed).choice(range(len(X)), int(len(X)*perc_super))
+        X = X[supervised]
+        y = y[supervised]
     groundings = []
     task_labels = []
     relation_labels = []
@@ -37,4 +40,9 @@ def manifold_toy_dataset(name, threshold = 0.5, n_samples = 100, perc_super = 0.
     body_index = groundings[:, 0:1]
     head_index = groundings[:, 1:2]
 
-    return X,y, body_index, head_index, relation_labels, task_labels
+    X = torch.tensor(X, dtype=torch.float)
+    y, body_index, head_index, relation_labels, task_labels = (torch.tensor(i) for i in (y, body_index, head_index, relation_labels, task_labels))
+    c_train = F.one_hot(y.long().ravel()).float()
+    y_train = F.one_hot(task_labels.long().ravel()).float()
+    X, c_train, body_index, head_index, relation_labels, y_train = (i.unsqueeze(0) for i in (X, c_train, body_index, head_index, relation_labels, y_train))
+    return TensorDataset(X, c_train, body_index, head_index, relation_labels, y_train)

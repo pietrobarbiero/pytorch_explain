@@ -6,41 +6,38 @@ from datasets.toy_manifold import manifold_toy_dataset
 from model import ManifoldRelationalDCR
 import torch
 import os
-import torch.nn.functional as F
 import pytorch_lightning as pl
 
 
 def main():
 
-    epochs = 200
-    learning_rate = 0.001
+    random_seed = 42
+    epochs = 500
+    learning_rate = 0.01
     batch_size = 32
     limit_batches = 1.0
-    emb_size = 20
-    number_digits = 2
+    input_features = 2
+    emb_size = 5
+    manifold_arity = 2
+    num_classes = 2
     gpu = False
+    crisp = True
+    set_level_rules = False
     dataset_name = "moon"
 
     results_dir = f"./results/"
     os.makedirs(results_dir, exist_ok=True)
     model_path = os.path.join(results_dir, 'model.pt')
 
-    X, y, body_index, head_index, relation_labels, task_labels = manifold_toy_dataset(dataset_name, only_on_manifold=True)
-    X = torch.tensor(X, dtype=torch.float)
-    y, body_index, head_index, relation_labels, task_labels = (torch.tensor(i) for i in (y, body_index, head_index, relation_labels, task_labels))
-
-    c_train = F.one_hot(y.long().ravel()).float()
-    y_train = F.one_hot(task_labels.long().ravel()).float()
-
-    X, c_train, body_index, head_index, relation_labels, y_train = (i.unsqueeze(0) for i in (X, c_train, body_index, head_index, relation_labels, y_train))
-    train_data = TensorDataset(X, c_train, body_index, head_index, relation_labels, y_train)
-    test_data = TensorDataset(X, c_train, body_index, head_index, relation_labels, y_train)
+    train_data = manifold_toy_dataset(dataset_name, only_on_manifold=True, random_seed=random_seed, train=True)
+    test_data = manifold_toy_dataset(dataset_name, only_on_manifold=True, random_seed=2*random_seed, train=False)
 
     train_dl = torch.utils.data.DataLoader(train_data, batch_size, shuffle=True, pin_memory=True)
     test_dl = torch.utils.data.DataLoader(test_data, batch_size, shuffle=False, pin_memory=True)
 
-    model = ManifoldRelationalDCR(input_features=2, emb_size=3, manifold_arity=2,
-                                  num_classes=2, predict_relation=False)
+    model = ManifoldRelationalDCR(input_features=input_features, emb_size=emb_size, manifold_arity=manifold_arity,
+                                  num_classes=num_classes, predict_relation=False, crisp=crisp,
+                                  set_level_rules=set_level_rules, learning_rate=learning_rate)
 
     # if not os.path.exists(model_path):
     print(f'Running epochs={epochs}, batch_size={batch_size}, learning_rate={learning_rate}')
@@ -51,7 +48,7 @@ def main():
                          limit_val_batches=limit_batches,
                          logger=logger)
     trainer.fit(model=model, train_dataloaders=train_dl, val_dataloaders=train_dl)
-    trainer.test(model=model, dataloaders=train_dl)
+    trainer.test(model=model, dataloaders=test_dl)
     torch.save(model.state_dict(), model_path)
 
 

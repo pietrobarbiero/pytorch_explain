@@ -3,6 +3,7 @@ from sklearn.metrics import accuracy_score
 from torch import nn
 import pytorch_lightning as pl
 from torch.nn import CrossEntropyLoss, BCELoss
+import torch.nn.functional as F
 from torch_explain.nn.concepts import ConceptReasoningLayer
 
 class ImageEmbedder(nn.Module):
@@ -18,17 +19,22 @@ class ImageEmbedder(nn.Module):
         return x
 
 class ConceptClassifier(nn.Module):
-    def __init__(self, input_features, num_classes):
+    def __init__(self, input_features, num_classes, crisp=False):
         super().__init__()
+        self.crisp = crisp
         self.encoder = nn.Sequential(
             nn.Linear(input_features, 5),
             nn.ReLU(),
             nn.Linear(5, num_classes),
-            nn.Softmax(dim=-1)
+            # nn.Softmax(dim=-1)
         )
 
     def forward(self, x):
         x = self.encoder(x)
+        if self.crisp:
+            x = F.gumbel_softmax(x, tau=100, hard=False, dim=-1)
+        else:
+            x = F.softmax(x, dim=-1)
         return x
 
 class TupleCreator(nn.Module):
@@ -55,18 +61,22 @@ class TupleEmbedder(nn.Module):
 
 
 class ManifoldRelationalDCR(pl.LightningModule):
-    def __init__(self, input_features, emb_size, manifold_arity, num_classes, predict_relation = False, concept_names=None, explanations=None, learning_rate=0.01,  temperature=10, verbose: bool = False, gpu=True):
+    def __init__(self, input_features, emb_size, manifold_arity, num_classes,
+                 predict_relation = False, set_level_rules=False, crisp=False,
+                 concept_names=None, explanations=None, learning_rate=0.01,  temperature=10,
+                 verbose: bool = False, gpu=True):
         super().__init__()
         self.image_embedder = ImageEmbedder(input_features, emb_size)
-        self.concept_classifier = ConceptClassifier(emb_size, num_classes=num_classes)
+        self.concept_classifier = ConceptClassifier(emb_size, num_classes=num_classes, crisp=crisp)
         self.tuple_creator = TupleCreator()
         self.emb_size = emb_size
         self.predict_relation = predict_relation
+        self.set_level_rules = set_level_rules
         if self.predict_relation:
-            self.relation_classifier = ConceptClassifier(emb_size*2, num_classes=1) #only-binary TODO: n-ary, multiple relations
+            self.relation_classifier = ConceptClassifier(emb_size*2, num_classes=1, crisp=crisp) #only-binary TODO: n-ary, multiple relations
             self.reasoner = ConceptReasoningLayer(emb_size*manifold_arity, n_concepts=num_classes+1, n_classes = num_classes) # +1 for the relation
         else:
-            self.reasoner = ConceptReasoningLayer(emb_size*manifold_arity, n_concepts=num_classes, n_classes = num_classes)
+            self.reasoner = ConceptReasoningLayer(emb_size * manifold_arity, n_concepts=num_classes, n_classes=num_classes, set_level_rules=set_level_rules)
 
 
         self.concept_names = concept_names
