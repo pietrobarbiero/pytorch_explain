@@ -7,6 +7,17 @@ import numpy as np
 
 import unittest
 
+
+def group_by(t, dim):
+    ids = t[:, dim].unique()
+    mask = t[:, None, dim] == ids
+    l = []
+    for i, id_rel in enumerate(ids):
+        temp = t[torch.argwhere(mask[:, i])]
+        temp = temp.squeeze(1)
+        l.append(temp)
+    return l
+
 class ManifoldTest(unittest.TestCase):
 
     def test_manifold_with_given_relation(self):
@@ -37,3 +48,28 @@ class ManifoldTest(unittest.TestCase):
         c, r, t, e = m(X,body_index, head_index)
         # Losses should match the following vectors (now dummy comparison, just for shape)
         return c.shape == torch.eye(2)[y].shape and t.shape == torch.eye(2)[task_labels].shape and r == np.reshape(relation_labels, [-1,1])
+
+
+
+    def test_tuple_creator_boolean_mask(self):
+
+        X = np.random.randint(size = [ 10, 4], low = 0, high = 1)
+
+        # id_atom, id_rel, id_const, id_pos
+        indices = [[0, 42, 0, 0],       #r(a,b) r a 0
+                   [0, 42, 1, 1],       #r(a,b) r b 1
+                   [1, 42, 0, 0],       #r(a,c) r a 0
+                   [1, 42, 2, 1],       #r(a,c) r c 1
+                   [2, 43, 0, 0],       #q(a) q a 0
+                   [3, 43, 2, 0]]     #q(c) q c 0
+
+        X = torch.tensor(X)
+        indices = torch.tensor(indices)
+
+
+
+        split_per_rels = group_by(indices, dim=1)
+        for sp in split_per_rels:
+            print(sp)
+            print(torch.stack(group_by(sp, 0),dim=0))
+
