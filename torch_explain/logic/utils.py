@@ -4,7 +4,6 @@ from sympy import lambdify, sympify
 import copy
 
 
-
 def replace_names(explanation: str, concept_names: List[str]) -> str:
     """
     Replace names of concepts in a formula.
