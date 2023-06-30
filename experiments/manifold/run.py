@@ -1,5 +1,4 @@
 from pytorch_lightning.loggers import TensorBoardLogger
-from sklearn.metrics import accuracy_score
 from torch.utils.data import TensorDataset
 
 from datasets.toy_manifold import manifold_toy_dataset
@@ -7,6 +6,10 @@ from model import ManifoldRelationalDCR
 import torch
 import os
 import pytorch_lightning as pl
+
+from torch_explain.logic.commons import Rule, Domain
+from torch_explain.logic.grounding import DomainGrounder
+from torch_explain.logic.indexing import Indexer
 
 
 def main():
@@ -23,23 +26,34 @@ def main():
     gpu = False
     crisp = True
     set_level_rules = False
+    predict_relation = True
     dataset_name = "moon"
 
     results_dir = f"./results/"
     os.makedirs(results_dir, exist_ok=True)
     model_path = os.path.join(results_dir, 'model.pt')
 
-    train_data = manifold_toy_dataset(dataset_name, only_on_manifold=True, random_seed=random_seed, train=True)
-    test_data = manifold_toy_dataset(dataset_name, only_on_manifold=True, random_seed=2*random_seed, train=False)
+    # data
+    X, q_labels, q_names = manifold_toy_dataset(dataset_name, only_on_manifold=True, random_seed=random_seed, train=True)
 
+    # logic
+    points = Domain("points", [f'{i}' for i in torch.arange(X.shape[1]).tolist()])
+    rule = Rule("phi", body=["r(X,Y)", "q(X)"], head=["q(Y)"], var2domain={"X": "points", "Y": "points"})
+    grounder = DomainGrounder({"points": points.constants}, [rule])
+    groundings = grounder.ground()
+    indexer = Indexer(groundings, q_names)
+    indexer.index_all()
+
+    # loaders
+    train_data = TensorDataset(X, q_labels)
     train_dl = torch.utils.data.DataLoader(train_data, batch_size, shuffle=True, pin_memory=True)
-    test_dl = torch.utils.data.DataLoader(test_data, batch_size, shuffle=False, pin_memory=True)
 
-    model = ManifoldRelationalDCR(input_features=input_features, emb_size=emb_size, manifold_arity=manifold_arity,
-                                  num_classes=num_classes, predict_relation=False, crisp=crisp,
+    # model
+    model = ManifoldRelationalDCR(indexer=indexer, input_features=input_features, emb_size=emb_size, manifold_arity=manifold_arity,
+                                  num_classes=num_classes, predict_relation=predict_relation, crisp=crisp,
                                   set_level_rules=set_level_rules, learning_rate=learning_rate)
 
-    # if not os.path.exists(model_path):
+    # training
     print(f'Running epochs={epochs}, batch_size={batch_size}, learning_rate={learning_rate}')
     logger = TensorBoardLogger(save_dir=results_dir, name="lightning_logs")
     trainer = pl.Trainer(max_epochs=epochs,
@@ -48,7 +62,6 @@ def main():
                          limit_val_batches=limit_batches,
                          logger=logger)
     trainer.fit(model=model, train_dataloaders=train_dl, val_dataloaders=train_dl)
-    trainer.test(model=model, dataloaders=test_dl)
     torch.save(model.state_dict(), model_path)
 
 
