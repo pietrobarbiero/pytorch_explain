@@ -35,16 +35,39 @@ def sort_index(index: torch.Tensor) -> torch.Tensor:
     index = index[torch.argsort(index[:, 1], stable=True)]
     return index
 
+    # _, indices = torch.sort(t[:, dim])
+    # t = t[indices]
+    # ids = t[:, dim].unique()
+    # mask = t[:, None, dim] == ids
+    # splits = torch.argmax(mask.float(), dim=0)
+    # r = torch.tensor_split(t, splits[1:])
+    # return r
 
-def group_by_no_for(t, dim):
+def group_by_no_for(groupby_values, tensor_to_group=None, dim=None):
     # TODO: add documentation
-    _, indices = torch.sort(t[:, dim])
-    t = t[indices]
-    ids = t[:, dim].unique()
-    mask = t[:, None, dim] == ids
-    splits = torch.argmax(mask.float(), dim=0)
-    r = torch.tensor_split(t, splits[1:])
-    return r
+    if tensor_to_group is None:
+        tensor_to_group = groupby_values
+    if dim is not None:
+        _, sorted_groupby_indices = torch.sort(groupby_values[:, dim])
+    else:
+        _, sorted_groupby_indices = torch.sort(groupby_values)
+    sorted_groupby_values = groupby_values[sorted_groupby_indices]
+
+    if dim is not None:
+        split_group = sorted_groupby_values
+        unique_groupby_values = sorted_groupby_values[:, dim].unique()
+        mask_for_split = sorted_groupby_values[:, None, dim] == unique_groupby_values
+    else:
+        split_group = tensor_to_group[sorted_groupby_indices]
+        unique_groupby_values = groupby_values.unique()
+        mask_for_split = sorted_groupby_values[:, None] == unique_groupby_values
+
+    splits = torch.argmax(mask_for_split.float(), dim=0)
+    return torch.tensor_split(split_group, splits[1:])
+
+
+def intersect_1d_no_loop(a: torch.tensor, b: torch.tensor):
+    return a[(a.view(1, -1) == b.view(-1, 1)).any(dim=0)]
 
 
 class Indexer:
@@ -85,6 +108,7 @@ class Indexer:
 
         self.indices = {}
         self.indices_groups = {}
+        self.supervised_queries_ids = None
 
     def index_all(self) -> Tuple[Dict[str, Tensor], Dict[str, List[Tensor]]]:
         # TODO: add documentation
@@ -100,7 +124,12 @@ class Indexer:
             'atoms': group_by_no_for(self.indices['atoms'], dim=1),
             'formulas': group_by_no_for(self.indices['formulas'], dim=1),
         }
+        self.supervised_queries_ids = torch.tensor(list(self.unique_query_index.values()))
         return self.indices, self.indices_groups
+
+    def get_supervised_slice(self, y, y_ids):
+        supervised_y_ids = intersect_1d_no_loop(y_ids, self.supervised_queries_ids)
+        return y[supervised_y_ids]
 
     def apply_index(self, X, index_name, group_id):
         # TODO: add documentation
