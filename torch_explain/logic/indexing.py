@@ -1,8 +1,11 @@
 import copy
 from typing import List, Dict, Tuple
+import torch
+from torch import Tensor
 
 
 def tuple_to_indexes(t, atom_index, query_index, relation_index):
+    # TODO: add documentation
     if t in query_index:
         atom_index[t] = query_index[t]
     else:
@@ -25,9 +28,30 @@ def tuple_str_to_int(t: Tuple) -> Tuple:
     return tuple(t[0]) + tuple([int(i) for i in t[1:]])
 
 
+def sort_index(index: torch.Tensor) -> torch.Tensor:
+    # TODO: check whether we need extra arguments to control the columns to sort
+    # We need them to be sorted first, by relation (column=1) and, then, by position (column=3)
+    index = index[torch.argsort(index[:, 3])]
+    index = index[torch.argsort(index[:, 1], stable=True)]
+    return index
+
+
+def group_by_no_for(t, dim):
+    # TODO: add documentation
+    _, indices = torch.sort(t[:, dim])
+    t = t[indices]
+    ids = t[:, dim].unique()
+    mask = t[:, None, dim] == ids
+    splits = torch.argmax(mask.float(), dim=0)
+    r = torch.tensor_split(t, splits[1:])
+    return r
+
+
 class Indexer:
 
     def __init__(self, groundings: Dict[str, List[Tuple]], queries: List[str]):
+        # TODO: add documentation with simple example of how to use the class
+
         self.groundings = groundings
         self.queries = queries
 
@@ -59,13 +83,36 @@ class Indexer:
         # the dictionary is updated while looping over the grounded rules
         self.formulas_index = {}
 
-    def index_all(self) -> Dict[str, List[Tuple]]:
-        indices = {
-            'queries': self.init_index_queries(),
-            'atoms': self.index_atoms(),  # (atom_index, relation_index, input_id, position)
-            'formulas': self.index_formulas(),  #
+        self.indices = {}
+        self.indices_groups = {}
+
+    def index_all(self) -> Tuple[Dict[str, Tensor], Dict[str, List[Tensor]]]:
+        # TODO: add documentation
+        init_index_queries = torch.tensor(self.init_index_queries())
+        index_atoms = sort_index(torch.tensor(self.index_atoms()))
+        index_formulas = sort_index(torch.tensor(self.index_formulas()))
+        self.indices = {
+            'queries': init_index_queries,  # [query_id_1, ..., query_id_n]
+            'atoms': index_atoms,  # [(atom_index, relation_index, input_id, position), ...]
+            'formulas': index_formulas,  # [(body_index, formula_index, grounded_relation_index, position, head_index), ...]
         }
-        return indices
+        self.indices_groups = {
+            'atoms': group_by_no_for(self.indices['atoms'], dim=1),
+            'formulas': group_by_no_for(self.indices['formulas'], dim=1),
+        }
+        return self.indices, self.indices_groups
+
+    def apply_index(self, X, index_name, group_id):
+        # TODO: add documentation
+        # rel_id = index[0, 1]
+        tuples = group_by_no_for(self.indices_groups[index_name][group_id], dim=0)
+        tuples = torch.stack(tuples, dim=0)
+        if tuples.shape[-1] > 4:
+            atom_ids = tuples[:, 0, -1]
+        else:
+            atom_ids = tuples[:, 0, 0]
+        tuples = tuples[:, :, 2]
+        return X[tuples].view(tuples.shape[0], -1), tuples, atom_ids
 
     def init_index_queries(self) -> List[Tuple[int, int, int, int]]:
         """
