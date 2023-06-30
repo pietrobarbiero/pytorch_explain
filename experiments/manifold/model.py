@@ -4,17 +4,10 @@ from torch import nn
 import pytorch_lightning as pl
 from torch.nn import CrossEntropyLoss, BCELoss, ModuleList
 import torch.nn.functional as F
+
+from torch_explain.logic.indexing import group_by_no_for
 from torch_explain.nn.concepts import ConceptReasoningLayer
 
-
-def group_by_no_for(t, dim):
-    _, indices = torch.sort(t[:, dim])
-    t = t[indices]
-    ids = t[:, dim].unique()
-    mask = t[:, None, dim] == ids
-    splits = torch.argmax(mask.float(), dim=0)
-    r = torch.tensor_split(t, splits[1:])
-    return r
 
 class Encoder(nn.Module):
     def __init__(self, input_features, output_features):
@@ -89,8 +82,8 @@ class ManifoldRelationalDCR(pl.LightningModule):
         self.encoder = Encoder(input_features, emb_size)
         if self.predict_relation:
             self.relation_classifiers = ModuleList([
-                torch.nn.Sequential(torch.nn.Linear(emb_size, 1)),  # q(X) classifier
-                torch.nn.Sequential(torch.nn.Linear(emb_size * 2, 1)),  # r(X,Y) classifier
+                torch.nn.Sequential(torch.nn.Linear(emb_size, 1), torch.nn.Sigmoid()),  # q(X) classifier
+                torch.nn.Sequential(torch.nn.Linear(emb_size * 2, 1), torch.nn.Sigmoid()),  # r(X,Y) classifier
             ])
             self.relation_embedders = ModuleList([
                 torch.nn.Sequential(torch.nn.Linear(emb_size, emb_size)),  # q(X) classifier
@@ -99,7 +92,7 @@ class ManifoldRelationalDCR(pl.LightningModule):
             self.reasoner = ConceptReasoningLayer(emb_size*manifold_arity, n_concepts=2, n_classes = num_classes) # +1 for the relation
         else:
             self.relation_classifiers = ModuleList([
-                torch.nn.Sequential(torch.nn.Linear(emb_size, 1)),  # q(X) classifier
+                torch.nn.Sequential(torch.nn.Linear(emb_size, 1), torch.nn.Sigmoid()),  # q(X) classifier
             ])
             self.relation_embedders = ModuleList([
                 torch.nn.Sequential(torch.nn.Linear(emb_size, emb_size)),  # q(X) classifier
@@ -112,15 +105,15 @@ class ManifoldRelationalDCR(pl.LightningModule):
         embeddings = self.encoder(X)
 
         # relation/concept predictions
-        preds_rel, embs_rel = [], []
+        preds_rel, embs_rel, queries_ids = [], [], []
         for rel_id, (relation_classifier, relation_embedder) in enumerate(zip(self.relation_classifiers, self.relation_embedders)):
-            embed_tuple, index_tuple, atom_ids = self.indexer.apply_index(embeddings, 'atoms', rel_id)
-            preds_rel.append(relation_classifier(embed_tuple))
-            embs_rel.append(relation_embedder(embed_tuple))
+            embeding_constants, constants_index, query_index = self.indexer.apply_index(embeddings, 'atoms', rel_id)
+            preds_rel.append(relation_classifier(embeding_constants))
+            embs_rel.append(relation_embedder(embeding_constants))
+            queries_ids.append(query_index)
+        queries_ids = torch.cat(queries_ids, dim=0)
         preds_rel = torch.cat(preds_rel, dim=0)
         embs_rel = torch.cat(embs_rel, dim=0)
-
-        preds_rel  = torch.sigmoid(preds_rel)
 
         # task predictions
         preds_xformula, index_xformula, formula_ids = self.indexer.apply_index(preds_rel, 'formulas', 0)
@@ -128,39 +121,33 @@ class ManifoldRelationalDCR(pl.LightningModule):
         y_preds = self.reasoner(embed_xformula, preds_xformula)
 
         # TODO: create OR rule for the task predictions
-        # here we just take the first mean
-        unique_indices = torch.unique(formula_ids)  # Get unique indices
-        num_unique_indices = unique_indices.size(0)
-        num_columns = y_preds.size(1)
-        # Create an empty tensor to store the sum of rows
-        sum_rows = torch.zeros(num_unique_indices, num_columns, dtype=torch.float32)
-        # Count the occurrence of each index
-        count = torch.zeros(num_unique_indices, dtype=torch.float32)
-        # Accumulate the sum of rows based on the index
-        sum_rows.scatter_add_(0, formula_ids.unsqueeze(1).repeat(1, num_columns), y_preds)
-        # Count the number of occurrences for each index
-        count.scatter_add_(0, formula_ids, torch.ones_like(formula_ids, dtype=torch.float32))
-        # Calculate the mean by dividing the sum by the count
-        y_preds_means = sum_rows / count.unsqueeze(1)
+        # aggregate task predictions (next: do it with OR)
+        y_preds_group = group_by_no_for(groupby_values=formula_ids, tensor_to_group=y_preds)
+        y_preds_group = torch.stack(y_preds_group, dim=0)
+        y_preds_mean = y_preds_group.mean(dim=1)
 
         explanations = None
         if explain:
             explanations = self.reasoner.explain(embed_xformula, preds_xformula, 'global')
 
-        return preds_rel, y_preds_means, explanations
+        return preds_rel, y_preds_mean, explanations, queries_ids, formula_ids
 
     def training_step(self, I, batch_idx):
         X, q_labels = I
         q_labels = q_labels.squeeze(0)
 
-        c_pred, y_pred, explanations = self.forward(X)
+        c_pred, y_pred, explanations, queries_ids, formula_ids = self.forward(X)
 
-        concept_loss = self.bce(c_pred[:len(q_labels)], q_labels.float())
-        task_loss = self.cross_entropy(y_pred, q_labels[:len(y_pred)].squeeze())
+        # get supervised slice
+        c_pred_sup = self.indexer.get_supervised_slice(c_pred, queries_ids)
+        q_labels_sup = self.indexer.get_supervised_slice(q_labels, torch.unique(formula_ids))
+
+        concept_loss = self.bce(c_pred_sup, q_labels.float())
+        task_loss = self.cross_entropy(y_pred, q_labels_sup.squeeze())
         loss = concept_loss + 0.5*task_loss
 
-        task_accuracy = accuracy_score(q_labels[:len(y_pred)].squeeze(), y_pred[:, 1] > 0.5)
-        concept_accuracy = accuracy_score(q_labels, c_pred[:len(q_labels)] > 0.5)
+        task_accuracy = accuracy_score(q_labels_sup.squeeze(), y_pred[:, 1] > 0.5)
+        concept_accuracy = accuracy_score(q_labels, c_pred_sup > 0.5)
         print(f'Epoch {self.current_epoch}: task accuracy: {task_accuracy:.4f} concept accuracy: {concept_accuracy:.4f}')
         return loss
 
@@ -168,10 +155,14 @@ class ManifoldRelationalDCR(pl.LightningModule):
         X, q_labels = I
         q_labels = q_labels.squeeze(0)
 
-        c_pred, y_pred, explanations = self.forward(X)
+        c_pred, y_pred, explanations, queries_ids, formula_ids = self.forward(X)
 
-        concept_loss = self.bce(c_pred[:len(q_labels)], q_labels.float())
-        task_loss = self.cross_entropy(y_pred, q_labels[:len(y_pred)].squeeze())
+        # get supervised slice
+        c_pred_sup = self.indexer.get_supervised_slice(c_pred, queries_ids)
+        q_labels_sup = self.indexer.get_supervised_slice(q_labels, torch.unique(formula_ids))
+
+        concept_loss = self.bce(c_pred_sup, q_labels.float())
+        task_loss = self.cross_entropy(y_pred, q_labels_sup.squeeze())
         loss = concept_loss + 0.5*task_loss
         return loss
 
@@ -179,10 +170,14 @@ class ManifoldRelationalDCR(pl.LightningModule):
         X, q_labels = I
         q_labels = q_labels.squeeze(0)
 
-        c_pred, y_pred, explanations = self.forward(X, explain=True)
+        c_pred, y_pred, explanations, queries_ids, formula_ids = self.forward(X)
 
-        task_accuracy = accuracy_score(q_labels[:len(y_pred)].squeeze(), y_pred[:, 1] > 0.5)
-        concept_accuracy = accuracy_score(q_labels, c_pred[:len(q_labels)] > 0.5)
+        # get supervised slice
+        c_pred_sup = self.indexer.get_supervised_slice(c_pred, queries_ids)
+        q_labels_sup = self.indexer.get_supervised_slice(q_labels, torch.unique(formula_ids))
+
+        task_accuracy = accuracy_score(q_labels_sup.squeeze(), y_pred[:, 1] > 0.5)
+        concept_accuracy = accuracy_score(q_labels, c_pred_sup > 0.5)
         print(f'Epoch {self.current_epoch}: task accuracy: {task_accuracy:.4f} concept accuracy: {concept_accuracy:.4f}')
         print(explanations)
         return task_accuracy, concept_accuracy

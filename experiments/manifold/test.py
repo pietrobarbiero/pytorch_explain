@@ -45,10 +45,10 @@ class ManifoldTest(unittest.TestCase):
         preds_rel, embs_rel = [], []
         queries_ids = []
         for rel_id, (relation_classifier, relation_embedder) in enumerate(zip(relation_classifiers, relation_embedders)):
-            embed_tuple, constants_index, query_index = indexer.apply_index(X, 'atoms', rel_id)
+            embeding_constants, constants_index, query_index = indexer.apply_index(X, 'atoms', rel_id)
             queries_ids.append(query_index)
-            preds_rel.append(relation_classifier(embed_tuple))
-            embs_rel.append(relation_embedder(embed_tuple))
+            preds_rel.append(relation_classifier(embeding_constants))
+            embs_rel.append(relation_embedder(embeding_constants))
         queries_ids = torch.cat(queries_ids, dim=0)
         preds_rel = torch.cat(preds_rel, dim=0)
         embs_rel = torch.cat(embs_rel, dim=0)
