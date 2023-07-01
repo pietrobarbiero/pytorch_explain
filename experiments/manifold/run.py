@@ -20,9 +20,10 @@ def main():
     batch_size = 32
     limit_batches = 1.0
     input_features = 2
-    emb_size = 5
+    emb_size = 10
     manifold_arity = 2
     num_classes = 2
+    num_relations = 2
     gpu = False
     crisp = True
     set_level_rules = False
@@ -49,7 +50,8 @@ def main():
     train_dl = torch.utils.data.DataLoader(train_data, batch_size, shuffle=True, pin_memory=True)
 
     # model
-    model = ManifoldRelationalDCR(indexer=indexer, input_features=input_features, emb_size=emb_size, manifold_arity=manifold_arity,
+    model = ManifoldRelationalDCR(indexer=indexer, input_features=input_features, emb_size=emb_size,
+                                  manifold_arity=manifold_arity, num_relations=num_relations,
                                   num_classes=num_classes, predict_relation=predict_relation, crisp=crisp,
                                   set_level_rules=set_level_rules, learning_rate=learning_rate)
 
@@ -63,28 +65,6 @@ def main():
                          logger=logger)
     trainer.fit(model=model, train_dataloaders=train_dl, val_dataloaders=train_dl)
     torch.save(model.state_dict(), model_path)
-
-
-
-    # optimizer = torch.optim.AdamW(model.parameters(), lr=0.01)
-    # loss_form_c = torch.nn.BCELoss()
-    # loss_form_y = torch.nn.BCELoss()
-    # model.train()
-    # for epoch in range(501):
-    #     optimizer.zero_grad()
-    #     c_pred, y_pred = model(X, body_index, head_index)
-    #
-    #     concept_loss = loss_form_c(c_pred, c_train)
-    #     task_loss = loss_form_y(y_pred, y_train)
-    #     loss = concept_loss + 0.5*task_loss
-    #     loss.backward()
-    #     optimizer.step()
-    #
-    #     # compute accuracy
-    #     if epoch % 100 == 0:
-    #         task_accuracy = accuracy_score(y_train, y_pred > 0.5)
-    #         concept_accuracy = accuracy_score(c_train, c_pred > 0.5)
-    #         print(f'Epoch {epoch}: loss {loss:.4f} task accuracy: {task_accuracy:.4f} concept accuracy: {concept_accuracy:.4f}')
 
 
 if __name__ == '__main__':
