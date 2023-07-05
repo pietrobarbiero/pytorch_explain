@@ -2,7 +2,7 @@ import copy
 from typing import List, Dict, Tuple
 import torch
 from torch import Tensor
-
+from torch_explain.logic.commons import Rule
 
 def tuple_to_indexes(t, atom_index, query_index, relation_index):
     # TODO: add documentation
@@ -24,8 +24,8 @@ def query_str_to_tuple(query_str: str) -> Tuple:
     return query_tuple
 
 
-def tuple_str_to_int(t: Tuple) -> Tuple:
-    return tuple(t[0]) + tuple([int(i) for i in t[1:]])
+# def tuple_str_to_int(t: Tuple) -> Tuple:
+#     return tuple(t[0]) + tuple([int(i) for i in t[1:]])
 
 
 def sort_index(index: torch.Tensor) -> torch.Tensor:
@@ -72,12 +72,11 @@ def intersect_1d_no_loop(a: torch.tensor, b: torch.tensor):
 
 class Indexer:
 
-    def __init__(self, groundings: Dict[str, List[Tuple]], queries: List[str]):
+    def __init__(self, groundings: Dict[str, List[Tuple[Tuple, Tuple]]], queries: List[str]):
         # TODO: add documentation with simple example of how to use the class
 
         self.groundings = groundings
         self.queries = queries
-
         # dictionary of unique grounded queries: {query_tuple: index}
         # a query tuple is a tuple of the form: ('relation_name', 'input_id_1', ..., 'input_id_n')
         self.unique_query_index = {}
@@ -114,18 +113,20 @@ class Indexer:
         # TODO: add documentation
         init_index_queries = torch.tensor(self.init_index_queries())
         index_atoms = sort_index(torch.tensor(self.index_atoms()))
-        index_formulas = sort_index(torch.tensor(self.index_formulas()))
+        index_formulas, dict_formula_tuples  = self.index_formulas()
+        index_formulas = sort_index(torch.tensor(index_formulas))
         self.indices = {
             'queries': init_index_queries,  # [query_id_1, ..., query_id_n]
             'atoms': index_atoms,  # [(atom_index, relation_index, input_id, position), ...]
-            'formulas': index_formulas,  # [(body_index, formula_index, grounded_relation_index, position, head_index), ...]
+            'formulas': index_formulas,# [(body_index, formula_index, grounded_relation_index, position, head_index), ...]
+            "substitutions": {k:torch.tensor(v) for k,v in dict_formula_tuples.items()} #dict[formula_id, List[Tuple[costant_id]]]
         }
         self.indices_groups = {
             'atoms': group_by_no_for(self.indices['atoms'], dim=1),
             'formulas': group_by_no_for(self.indices['formulas'], dim=1),
         }
         self.supervised_queries_ids = torch.tensor(list(self.unique_query_index.values()))
-        return self.indices, self.indices_groups
+        return self.indices, self.indices_groups,
 
     def get_supervised_slice(self, y, y_ids):
         supervised_y_ids = intersect_1d_no_loop(y_ids, self.supervised_queries_ids)
@@ -141,7 +142,44 @@ class Indexer:
         else:
             atom_ids = tuples[:, 0, 0]
         tuples = tuples[:, :, 2]
+
         return X[tuples].view(tuples.shape[0], -1), tuples, atom_ids
+
+    def apply_index_atoms(self, X, group_id):
+        # TODO: add documentation
+        # rel_id = index[0, 1]
+        tuples = group_by_no_for(self.indices_groups["atoms"][group_id], dim=0)
+        tuples = torch.stack(tuples, dim=0)
+        atom_ids = tuples[:, 0, 0]
+        tuples = tuples[:, :, 2]
+
+        return X[tuples].view(tuples.shape[0], -1), tuples, atom_ids
+
+    def apply_index_formulas(self, constant_embedddings, atom_predictions, formula_id):
+
+        group_id = self.formulas_index[formula_id]
+        # TODO: add documentation
+        # rel_id = index[0, 1]
+        tuples = group_by_no_for(self.indices_groups["formulas"][group_id], dim=0)
+        tuples = torch.stack(tuples, dim=0)
+        # formulas_ids = tuples[:, 0, -1]
+        tuples = tuples[:, :, 2]
+        substitutions = self.indices["substitutions"][group_id]
+
+        return constant_embedddings[substitutions].view(substitutions.shape[0], -1), atom_predictions[tuples].view(tuples.shape[0], -1) #, tuples, atom_ids, substitutions
+
+    def group_or(self, grounding_predictions, formula_id):
+
+        group_id = self.formulas_index[formula_id]
+        tuples = group_by_no_for(self.indices_groups["formulas"][group_id], dim=0)
+        tuples = torch.stack(tuples, dim=0)
+        head_ids = tuples[:, 0, -1]
+        y_preds_group = group_by_no_for(groupby_values=head_ids, tensor_to_group=grounding_predictions)
+        y_preds_group = torch.stack(y_preds_group, dim=0)
+        y_preds_mean = y_preds_group.mean(dim=1)
+
+        return constant_embedddings[substitutions].view(substitutions.shape[0], -1), atom_predictions[tuples].view(
+            tuples.shape[0], -1)  # , tuples, atom_ids, substitutions
 
     def init_index_queries(self) -> List[Tuple[int, int, int, int]]:
         """
@@ -184,8 +222,8 @@ class Indexer:
 
         # loop over all atoms found in heads/bodies of grounded rules
         indices_atoms = []
-        for k, v in self.groundings.items():
-            for head, body in v:
+        for k, (groundings, _) in self.groundings.items():
+            for head, body in groundings:
 
                 for h_tuple in head:
                     # skip if the current atom was already indexed
@@ -224,15 +262,22 @@ class Indexer:
         """
         # loop over all formulas
         indices_formulas = []
-        for k, v in self.groundings.items():
-
+        indices_tuples_formulas = {}
+        indices_formulas_dict = {}
+        for k, (groundings, substitutions) in self.groundings.items():
+            substitutions = [[int(l) for l in k] for k in substitutions]
             # add {'formula_name', index} to the dictionary formulas_index if not already present
             if k not in self.formulas_index:
                 # TODO: check what happens with more than 1 formula in the dataset
                 self.formulas_index[k] = len(self.formulas_index)
 
+            indices_formulas_dict = {self.formulas_index[k]: []}
+
+
             # loop over all grounded rules of the form: ((head_tuple), (body_tuple_1, body_tuple_2, ...))
-            for head, body in v:
+            for y, (head, body) in enumerate(groundings):
+                indices_formulas_dict[self.formulas_index[k]].append([])
+
 
                 # get head index (and check that there is only one head)
                 assert len(head) == 1  # TODO: check what happens with more than 1 head
@@ -246,8 +291,9 @@ class Indexer:
                 for pos, b in enumerate(body):
                     # TODO: check whether to use grounded_relation_index or unique_atom_index or unique_query_index
                     indices_formulas.append((self.bodies_index[body], self.formulas_index[k], self.grounded_relation_index[b], pos, index_head))
-
-        return indices_formulas
+                    indices_formulas_dict[self.formulas_index[k]][-1].append(self.grounded_relation_index[b])
+            indices_tuples_formulas[self.formulas_index[k]] = substitutions
+        return indices_formulas, indices_tuples_formulas
 
     def invert_index_relation(self, tuple_relation: Tuple[int, int, int, int]):
         inverted_unique_tuples = {v: k for k, v in self.unique_query_index.items()}

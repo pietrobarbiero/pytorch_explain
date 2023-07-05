@@ -20,10 +20,14 @@ class DomainGrounder:
         for clause in self.rules:
             added = 0
             groundings = []
+            substitutions = []
             for ground_vars in product(*[self.domains[d] for d in clause.vars.values()]):
 
                 var_assignments = {k:v for k,v in zip(
                     clause.vars.keys(), ground_vars)}
+
+                # We use a lexicographical order of the variables
+                constant_tuples = [v for k,v in sorted(var_assignments.items(), key= lambda x: x[0])]
 
                 body_atoms = []
                 for atom in clause.body:
@@ -41,10 +45,10 @@ class DomainGrounder:
                     assert all(ground_atom), 'Unresolved %s' % str(ground_atom)
                     head_atoms.append(ground_atom)
                 groundings.append((tuple(head_atoms), tuple(body_atoms)))
-
+                substitutions.append(constant_tuples)
                 added += 1
                 if self.limit > 0 and self.limit >= added:
                     break
 
-            res[clause.name] = groundings
+            res[clause.name] = (groundings, substitutions)
         return res

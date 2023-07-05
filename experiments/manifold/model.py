@@ -75,9 +75,9 @@ class ManifoldRelationalDCR(pl.LightningModule):
         # relation/concept predictions
         preds_rel, embs_rel, queries_ids = [], [], []
         for rel_id, (relation_classifier, relation_embedder) in enumerate(zip(self.relation_classifiers, self.relation_embedders)):
-            embeding_constants, constants_index, query_index = self.indexer.apply_index(embeddings, 'atoms', rel_id)
-            preds_rel.append(relation_classifier(embeding_constants))
-            embs_rel.append(relation_embedder(embeding_constants))
+            tuple_embeddings, constants_index, query_index = self.indexer.apply_index(embeddings, 'atoms', rel_id)
+            preds_rel.append(relation_classifier(tuple_embeddings))
+            embs_rel.append(relation_embedder(tuple_embeddings))
             queries_ids.append(query_index)
         queries_ids = torch.cat(queries_ids, dim=0)
         preds_rel = torch.cat(preds_rel, dim=0)

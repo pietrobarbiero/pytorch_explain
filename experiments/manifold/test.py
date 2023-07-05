@@ -45,7 +45,7 @@ class ManifoldTest(unittest.TestCase):
         preds_rel, embs_rel = [], []
         queries_ids = []
         for rel_id, (relation_classifier, relation_embedder) in enumerate(zip(relation_classifiers, relation_embedders)):
-            embeding_constants, constants_index, query_index = indexer.apply_index(X, 'atoms', rel_id)
+            embeding_constants, constants_index, query_index = indexer.apply_index_atoms(X, rel_id)
             queries_ids.append(query_index)
             preds_rel.append(relation_classifier(embeding_constants))
             embs_rel.append(relation_embedder(embeding_constants))
@@ -54,14 +54,15 @@ class ManifoldTest(unittest.TestCase):
         embs_rel = torch.cat(embs_rel, dim=0)
 
         # task predictions
-        preds_xformula, index_xformula, formula_ids = indexer.apply_index(preds_rel, 'formulas', 0)
-        embed_xformula, index_xformula, formula_ids = indexer.apply_index(embs_rel, 'formulas', 0)
-        y_preds = task_predictor(embed_xformula, preds_xformula)
+        embed_substitutions, preds_xformula = indexer.apply_index_formulas(X, preds_rel, 0)
+        grounding_preds = task_predictor(embed_substitutions, preds_xformula)
 
         # aggregate task predictions (next: do it with OR)
-        y_preds_group = group_by_no_for(groupby_values=formula_ids, tensor_to_group=y_preds)
-        y_preds_group = torch.stack(y_preds_group, dim=0)
-        y_preds_mean = y_preds_group.mean(dim=1)
+        y_task = indexer.group_or(grounding_preds)
+
+        # y_preds_group = group_by_no_for(groupby_values=formula_ids, tensor_to_group=y_preds)
+        # y_preds_group = torch.stack(y_preds_group, dim=0)
+        # y_preds_mean = y_preds_group.mean(dim=1)
 
         # get supervised slice
         sup_preds_rel = indexer.get_supervised_slice(preds_rel, queries_ids)
