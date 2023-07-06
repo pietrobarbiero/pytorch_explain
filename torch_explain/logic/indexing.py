@@ -72,7 +72,7 @@ def intersect_1d_no_loop(a: torch.tensor, b: torch.tensor):
 
 class Indexer:
 
-    def __init__(self, groundings: Dict[str, List[Tuple[Tuple, Tuple]]], queries: List[str]):
+    def __init__(self, groundings: Dict[str, List[Tuple[Tuple, Tuple]]], queries: Dict[str, List[str]]):
         # TODO: add documentation with simple example of how to use the class
 
         self.groundings = groundings
@@ -108,10 +108,11 @@ class Indexer:
         self.indices = {}
         self.indices_groups = {}
         self.supervised_queries_ids = None
+        self.indices_head = set()
 
     def index_all(self) -> Tuple[Dict[str, Tensor], Dict[str, List[Tensor]]]:
         # TODO: add documentation
-        init_index_queries = torch.tensor(self.init_index_queries())
+        init_index_queries = self.init_index_queries()
         index_atoms = sort_index(torch.tensor(self.index_atoms()))
         index_formulas, dict_formula_tuples  = self.index_formulas()
         index_formulas = sort_index(torch.tensor(index_formulas))
@@ -126,7 +127,11 @@ class Indexer:
             'formulas': group_by_no_for(self.indices['formulas'], dim=1),
         }
         self.supervised_queries_ids = torch.tensor(list(self.unique_query_index.values()))
-        return self.indices, self.indices_groups,
+        return self.indices, self.indices_groups
+
+    def lookup_query(self, source: torch.Tensor, key: str) -> torch.Tensor:
+        ids = self.indices['queries'][key]
+        return source[ids]
 
     def get_supervised_slice(self, y, y_ids):
         supervised_y_ids = intersect_1d_no_loop(y_ids, self.supervised_queries_ids)
@@ -174,14 +179,14 @@ class Indexer:
         tuples = group_by_no_for(self.indices_groups["formulas"][group_id], dim=0)
         tuples = torch.stack(tuples, dim=0)
         head_ids = tuples[:, 0, -1]
-        y_preds_group = group_by_no_for(groupby_values=head_ids, tensor_to_group=grounding_predictions)
-        y_preds_group = torch.stack(y_preds_group, dim=0)
-        y_preds_mean = y_preds_group.mean(dim=1)
 
-        return constant_embedddings[substitutions].view(substitutions.shape[0], -1), atom_predictions[tuples].view(
-            tuples.shape[0], -1)  # , tuples, atom_ids, substitutions
+        grounding_predictions_agg = torch.zeros(len(self.unique_atom_index), 1) # TODO: what is the neutral element of the T-norm?
+        # return grounding_predictions_agg.scatter_reduce(0, head_ids.view(-1, 1), grounding_predictions, reduce='amax') # TODO: do this operation according to T-norm
+        grounding_predictions = torch.log(grounding_predictions)
+        grounding_predictions_agg = grounding_predictions_agg.scatter_reduce(0, head_ids.view(-1, 1), grounding_predictions, reduce='sum')
+        return torch.sigmoid(grounding_predictions_agg)
 
-    def init_index_queries(self) -> List[Tuple[int, int, int, int]]:
+    def init_index_queries(self) -> Dict[str, List[Tuple[int, int, int, int]]]:
         """
         Initialize the index of unique grounded queries (a.k.a. the concepts/relations to be supervised).
         This function loops over the input queries of the form: ['relation_name(input_id_1, ..., input_id_n)', ...]
@@ -189,18 +194,21 @@ class Indexer:
         where query_tuple is a tuple of the form: ('relation_name', 'input_id_1', ..., 'input_id_n').
         :return: index of unique grounded queries
         """
-        indices_queries = []
-        for q in self.queries:
-            query_tuple = query_str_to_tuple(q)
+        indices_queries_dict = {}
+        for k, v in self.queries.items():
+            indices_queries = []
+            for q in v:
+                query_tuple = query_str_to_tuple(q)
 
-            # append query to unique_tuples if not already present
-            if query_tuple not in self.unique_query_index:
-                self.unique_query_index[query_tuple] = len(self.unique_query_index)
+                # append query to unique_tuples if not already present
+                if query_tuple not in self.unique_query_index:
+                    self.unique_query_index[query_tuple] = len(self.unique_query_index)
 
-            # append query ID to indices_queries
-            indices_queries.append(self.unique_query_index[query_tuple])
+                # append query ID to indices_queries
+                indices_queries.append(self.unique_query_index[query_tuple])
 
-        return indices_queries
+            indices_queries_dict[k] = indices_queries
+        return indices_queries_dict
 
     def index_atoms(self) -> List[Tuple[int, int, int, int]]:
         """
@@ -233,6 +241,8 @@ class Indexer:
                         # TODO: check whether we actually need all these indexes
                         idx = tuple_to_indexes(h_tuple, self.unique_atom_index, self.grounded_relation_index, self.relation_index)
                         indices_atoms.extend(idx)
+
+                    self.indices_head.add(h_tuple)
 
                 for b_tuple in body:
                     # skip if the current atom was already indexed

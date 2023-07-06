@@ -22,12 +22,13 @@ def main():
     input_features = 2
     emb_size = 10
     manifold_arity = 2
-    num_classes = 2
+    num_classes = 1
     num_relations = 2
     gpu = False
     crisp = True
     set_level_rules = False
     predict_relation = True
+    temperature = 100
     dataset_name = "moon"
 
     results_dir = f"./results/"
@@ -35,7 +36,8 @@ def main():
     model_path = os.path.join(results_dir, 'model.pt')
 
     # data
-    X, q_labels, q_names = manifold_toy_dataset(dataset_name, only_on_manifold=True, random_seed=random_seed, train=True)
+    X, q_labels, q_names = manifold_toy_dataset(dataset_name, only_on_manifold=False, random_seed=random_seed,
+                                                train=True, perc_super=1, n_samples=30)
 
     # logic
     points = Domain("points", [f'{i}' for i in torch.arange(X.shape[1]).tolist()])
@@ -51,7 +53,8 @@ def main():
 
     # model
     model = ManifoldRelationalDCR(indexer=indexer, input_features=input_features, emb_size=emb_size,
-                                  manifold_arity=manifold_arity, num_relations=num_relations,
+                                  manifold_arity=manifold_arity, num_relations=num_relations, concept_names=rule.body,
+                                  task_names=rule.head, temperature=temperature,
                                   num_classes=num_classes, predict_relation=predict_relation, crisp=crisp,
                                   set_level_rules=set_level_rules, learning_rate=learning_rate)
 
@@ -65,6 +68,7 @@ def main():
                          logger=logger)
     trainer.fit(model=model, train_dataloaders=train_dl, val_dataloaders=train_dl)
     torch.save(model.state_dict(), model_path)
+    trainer.test(model=model, dataloaders=train_dl)
 
 
 if __name__ == '__main__':

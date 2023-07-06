@@ -22,12 +22,12 @@ def manifold_toy_dataset(name, threshold = 0.5, n_samples = 100, perc_super = 0.
     # q_names = ['q(0)', 'q(1)', 'q(2)', 'r(0,1)', 'r(1,2)', 'r(2,0)']
     # q_labels = torch.tensor([0, 1, 0, 0, 1, 1], dtype=torch.long)
 
-    q_names = []
+    q_names = {'concepts': [], 'tasks': []}
     q_labels = []
 
     # Add the query (task label) for each point
     for i in range(len(X)):
-        q_names.append(f'q({i})')
+        q_names['tasks'].append(f'q({i})')
         q_labels.append(y[i])
 
     # Add the query (relation label) for each pair of points
@@ -40,10 +40,10 @@ def manifold_toy_dataset(name, threshold = 0.5, n_samples = 100, perc_super = 0.
         if only_on_manifold:
             if is_close_x1_x2:
                 q_labels.append(is_close_x1_x2)
-                q_names.append(f'r({i1},{i2})')
+                q_names['concepts'].append(f'r({i1},{i2})')
         else:
             q_labels.append(is_close_x1_x2)
-            q_names.append(f'r({i1},{i2})')
+            q_names['concepts'].append(f'r({i1},{i2})')
 
     X = torch.tensor(X, dtype=torch.float).unsqueeze(0)
     q_labels = torch.tensor(q_labels, dtype=torch.long).unsqueeze(1).unsqueeze(0)

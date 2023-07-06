@@ -11,7 +11,7 @@ def softselect(values, temperature):
 
 
 class ConceptReasoningLayer(torch.nn.Module):
-    def __init__(self, emb_size, n_concepts, n_classes, logic: Logic = GodelTNorm(), temperature: float = 100., set_level_rules: bool = False):
+    def __init__(self, emb_size, n_concepts, n_classes, logic: Logic = GodelTNorm(), temperature: float = 1., set_level_rules: bool = False):
         super().__init__()
         self.emb_size = emb_size
         self.n_concepts = n_concepts
@@ -46,8 +46,8 @@ class ConceptReasoningLayer(torch.nn.Module):
     def forward(self, x, c, return_attn=False, sign_attn=None, filter_attn=None):
         values = c.unsqueeze(-1).repeat(1, 1, self.n_classes)
 
+        sign_emb = filter_emb = x
         if sign_attn is None:
-            sign_emb = filter_emb = x
             if self.set_level_rules:
                 sign_emb = self.sign_nn_before_pool(x)
                 sign_emb = torch.concat([
@@ -97,7 +97,7 @@ class ConceptReasoningLayer(torch.nn.Module):
         else:
             return preds
 
-    def explain(self, x, c, mode, concept_names=None, class_names=None, filter_attn=None):
+    def explain(self, x, c, mode, concept_names=None, class_names=None, filter_attn=None, sign_attn=None):
         assert mode in ['local', 'global', 'exact']
 
         if concept_names is None:
@@ -106,7 +106,7 @@ class ConceptReasoningLayer(torch.nn.Module):
             class_names = [f'y_{i}' for i in range(self.n_classes)]
 
         # make a forward pass to get predictions and attention weights
-        y_preds, sign_attn_mask, filter_attn_mask = self.forward(x, c, return_attn=True, filter_attn=filter_attn)
+        y_preds, sign_attn_mask, filter_attn_mask = self.forward(x, c, return_attn=True, filter_attn=filter_attn, sign_attn=sign_attn)
 
         explanations = []
         all_class_explanations = {cn: [] for cn in class_names}

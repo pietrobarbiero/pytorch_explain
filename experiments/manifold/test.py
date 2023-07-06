@@ -19,7 +19,10 @@ class ManifoldTest(unittest.TestCase):
         # data
         emb_size = 4
         X = torch.randn(size=[3, emb_size])
-        q_names = ['r(1,2)', 'r(2,0)', 'q(2)', 'q(0)', 'q(1)']
+        q_names = {
+            'concepts': ['r(1,2)', 'r(2,0)', 'q(2)', 'q(0)', 'q(1)'],
+            'tasks': ['q(2)', 'q(0)', 'q(1)']
+        }
         q_labels = torch.randint(0, 2, size=[5, 1])
 
         # logic
@@ -35,46 +38,25 @@ class ManifoldTest(unittest.TestCase):
             torch.nn.Sequential(torch.nn.Linear(emb_size, 1), torch.nn.Sigmoid()),  # q(X) classifier
             torch.nn.Sequential(torch.nn.Linear(emb_size*2, 1), torch.nn.Sigmoid()),  # r(X,Y) classifier
         ])
-        relation_embedders = ModuleList([
-            torch.nn.Sequential(torch.nn.Linear(emb_size, emb_size)),  # q(X) classifier
-            torch.nn.Sequential(torch.nn.Linear(emb_size*2, emb_size)),  # r(X,Y) classifier
-        ])
-        task_predictor = ConceptReasoningLayer(emb_size=emb_size*2, n_concepts=2, n_classes=2)
+        task_predictor = ConceptReasoningLayer(emb_size=emb_size*2, n_concepts=2, n_classes=1)
 
         # relation/concept predictions
-        preds_rel, embs_rel = [], []
-        queries_ids = []
-        for rel_id, (relation_classifier, relation_embedder) in enumerate(zip(relation_classifiers, relation_embedders)):
+        concept_predictions = []
+        for rel_id, relation_classifier in enumerate(relation_classifiers):
             embeding_constants, constants_index, query_index = indexer.apply_index_atoms(X, rel_id)
-            queries_ids.append(query_index)
-            preds_rel.append(relation_classifier(embeding_constants))
-            embs_rel.append(relation_embedder(embeding_constants))
-        queries_ids = torch.cat(queries_ids, dim=0)
-        preds_rel = torch.cat(preds_rel, dim=0)
-        embs_rel = torch.cat(embs_rel, dim=0)
+            concept_predictions.append(relation_classifier(embeding_constants))
+        concept_predictions = torch.cat(concept_predictions, dim=0)
 
         # task predictions
-        embed_substitutions, preds_xformula = indexer.apply_index_formulas(X, preds_rel, 0)
+        embed_substitutions, preds_xformula = indexer.apply_index_formulas(X, concept_predictions, 'phi')
         grounding_preds = task_predictor(embed_substitutions, preds_xformula)
 
         # aggregate task predictions (next: do it with OR)
-        y_task = indexer.group_or(grounding_preds)
+        task_predictions = indexer.group_or(grounding_preds, 'phi')
+        task_predictions = torch.max(task_predictions, concept_predictions)
 
-        # y_preds_group = group_by_no_for(groupby_values=formula_ids, tensor_to_group=y_preds)
-        # y_preds_group = torch.stack(y_preds_group, dim=0)
-        # y_preds_mean = y_preds_group.mean(dim=1)
-
-        # get supervised slice
-        sup_preds_rel = indexer.get_supervised_slice(preds_rel, queries_ids)
-        sup_y_rel = indexer.get_supervised_slice(q_labels, torch.unique(formula_ids))
-
-        # check predictions
-        correct_predictions_rel = (q_labels == (sup_preds_rel>0.5))
-        correct_predictions_y = (sup_y_rel.squeeze() == (y_preds_mean[:, 1]>0.5))
-
-        print(correct_predictions_rel)
-        print(correct_predictions_y)
-
+        c_preds = indexer.lookup_query(concept_predictions, 'concepts')
+        y_preds = indexer.lookup_query(task_predictions, 'tasks')
 
     def test_manifold_with_given_relation(self):
 
