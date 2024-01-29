@@ -11,7 +11,6 @@ from sklearn.tree import DecisionTreeClassifier
 from torch.nn.functional import one_hot
 from torch.utils.data import TensorDataset
 
-from experiments.data.tabula_muris_comet.datamgr import SimpleDataManager
 
 
 def load_mimic(base_dir: str = './data/'):
@@ -274,13 +273,101 @@ def load_cub(base_dir='./data'):
             test_data = TensorDataset(x_test, y_test)
             return train_data, val_data, test_data, concept_names
 
+def load_mnist_addition(base_dir='./data'):
+    from torchvision import datasets
+    from torchvision import transforms
+
+    '''Function to load the MNIST addition dataset. It is a dataset for concept-based classification. It employs
+    two MNIST datasets as input and the task is to predict the sum of the two digits. The concepts are the two digits
+    and the task is the sum of the two digits. 
+
+    Returns 
+    train_data: TensorDataset
+        Dataset containing the training data.
+    test_data: TensorDataset
+        Dataset containing the test data.
+    '''
+
+    if os.path.exists(os.path.join(base_dir, 'MNIST_addition/train_data.pt')):
+        train_data = torch.load(os.path.join(base_dir, 'MNIST_addition/train_data.pt'))
+        val_data = torch.load(os.path.join(base_dir, 'MNIST_addition/val_data.pt'))
+        test_data = torch.load(os.path.join(base_dir, 'MNIST_addition/test_data.pt'))
+        return train_data, val_data, test_data
+
+    # Load the MNIST dataset
+    dataset = datasets.MNIST(root=base_dir, download=True, train=True)
+    test_dataset = datasets.MNIST(root=base_dir, download=True, train=False)
+
+    # Define class dataset for the MNIST addition dataset
+    class MNISTAdditionDataset(torch.utils.data.Dataset):
+        def __init__(self,  dataset):
+            self.dataset = dataset
+            self.transform = transforms.Compose([transforms.ToTensor()])
+            self.index_dataset2 = np.random.randint(0, len(self.dataset), len(self.dataset))
+
+        def __len__(self):
+            return len(self.dataset)
+
+        def __getitem__(self, idx):
+            image, label = self.dataset[idx]
+            image = self.transform(image)
+
+            image2, label2 = self.dataset[self.index_dataset2[idx]]
+            image2 = self.transform(image2)
+
+            c_label = torch.zeros(20)
+            c_label[label] = 1
+            c_label[label2] = 1
+
+            y_label = label + label2
+
+            return image, image2, c_label, y_label
+
+    train_mnist_addition_dataset = MNISTAdditionDataset(dataset)
+    test_mnist_addition_dataset = MNISTAdditionDataset(test_dataset)
+
+    return train_mnist_addition_dataset, test_mnist_addition_dataset
+
+def extract_image_features(dataset, filename='data/data.pt'):
+    '''Function to extract the features from the image dataset. It extracts the features from the images using a
+    pre-trained ResNet18 model. The features are then saved in a file. If the file already exists, it loads the
+    features from the file.
+    '''
+    import torchvision
+
+    if os.path.exists(filename):
+        data = torch.load(filename)
+        return data
+
+    # Load the ResNet18 model
+    model = torchvision.models.resnet18(pretrained=True)
+    model.fc = torch.nn.Identity()
+    model.eval()
+
+    # Extract the features from the images
+    data = []
+    dataloader = torch.utils.data.DataLoader(dataset, batch_size=100, shuffle=False)
+    for x, y in dataloader:
+        with torch.no_grad():
+            features = model(x)
+        data.append((features, y))
+
+    # Save the features in a file
+    torch.save(data, filename)
+    return data
+
+
 
 def load_tabula_muris(base_dir='./data', batch_size=30, mode='train'):
+    from experiments.data.tabula_muris_comet.datamgr import SimpleDataManager
+
     dm = SimpleDataManager(batch_size=batch_size)
     return dm.get_data_loader(os.path.join(base_dir, 'tabula_muris_comet'), mode=mode)
 
 
 if __name__ == '__main__':
+    from experiments.data.tabula_muris_comet.datamgr import SimpleDataManager
+
     dm = SimpleDataManager(batch_size=30)
     dl = dm.get_data_loader('./tabula_muris_comet')
     # x, y, c = load_celldiff('.')

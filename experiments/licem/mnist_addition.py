@@ -34,11 +34,12 @@ def train_concept_bottleneck_model(train_dataset, test_dataset, embedding_size=3
     task_predictor = ConceptLinearLayer(embedding_size, 19, bias=True)
     model = torch.nn.Sequential(concept_embedder, task_predictor)
 
-    optimizer = torch.optim.AdamW(model.parameters(), lr=0.001)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=0.01)
     loss_form_c = torch.nn.BCELoss()
     loss_form_y = torch.nn.BCELoss()
     model.train()
-    for epoch in pbar := tqdm(range(200), desc='Training'):
+    pbar = tqdm(range(500), desc='Training')
+    for epoch in pbar:
         optimizer.zero_grad()
 
         c_emb, c_pred = concept_embedder(x_train, c=c_train, train=True)
@@ -59,8 +60,10 @@ def train_concept_bottleneck_model(train_dataset, test_dataset, embedding_size=3
 
             task_accuracy = accuracy_score(y_test, y_pred > 0.5)
             concept_accuracy = accuracy_score(c_test, c_pred > 0.5)
-            pbar.set_postfix_str(f'Epoch {epoch}: loss {loss:.4f} task accuracy: {task_accuracy:.4f} '
-                  f'concept accuracy: {concept_accuracy:.4f} weight loss: {weight_attn:.4f} bias loss: {torch.mean(bias_attn.abs()):.4f} ')
+            post_fix = f'Epoch {epoch}: loss {loss.item():.4f} task acc: {task_accuracy:.4f} '\
+                       f'concept acc: {concept_accuracy:.4f} weight l: {weight_attn.abs().mean().item():.4f} '\
+                       f'bias l: {torch.mean(bias_attn.abs()):.4f}'
+            pbar.set_postfix_str(post_fix)
 
     # local_explanations = task_predictor.explain(c_emb, c_pred, 'local', concept_names)
     global_explanations = task_predictor.explain(c_emb, c_pred, 'global', concept_names)
@@ -75,6 +78,6 @@ if __name__ == '__main__':
 
     train_dataset, test_dataset = load_mnist_addition()
 
-    train_concept_bottleneck_model(train_dataset, test_dataset, embedding_size=32, concept_names=['Zero', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine',
+    train_concept_bottleneck_model(train_dataset, test_dataset, concept_names=['Zero', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine',
                                                                                                   'Zero', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine'])
 
