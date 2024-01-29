@@ -10,6 +10,170 @@ def softselect(values, temperature):
     return softscores
 
 
+class ConceptLinearLayer(torch.nn.Module):
+    """
+    This layer implements a linear layer working over concept embedding and outputting the task prediction.
+    Similarly to the ConceptReasoningLayer, it also makes an interpretable prediction. This time, however, the
+    prediction is a linear combination of the concepts, where the weights are predicted for each sample by the layer.
+    """
+    def __init__(self, emb_size, n_classes, bias=True, attention=False):
+        super().__init__()
+        self.emb_size = emb_size
+        self.n_classes = n_classes
+        self.weight_nn = torch.nn.Sequential(
+            torch.nn.Linear(emb_size, emb_size),
+            torch.nn.LeakyReLU(),
+            torch.nn.Linear(emb_size, 3 * n_classes),
+            torch.nn.Sigmoid(),
+        )
+        self.pos_weight_nn = torch.nn.Sequential(
+            torch.nn.Linear(emb_size, emb_size),
+            torch.nn.LeakyReLU(),
+            torch.nn.Linear(emb_size, n_classes),
+            torch.nn.Sigmoid(),
+        )
+        self.neg_weight_nn = torch.nn.Sequential(
+            torch.nn.Linear(emb_size, emb_size),
+            torch.nn.LeakyReLU(),
+            torch.nn.Linear(emb_size, n_classes),
+            torch.nn.Sigmoid(),
+        )
+        self.bias = bias
+        if self.bias:
+            self.pos_bias_nn = torch.nn.Sequential(torch.nn.Linear(emb_size, emb_size),
+                                               torch.nn.LeakyReLU(),
+                                               torch.nn.Linear(emb_size, n_classes),
+                                               torch.nn.Sigmoid()
+                                               )
+            self.neg_bias_nn = torch.nn.Sequential(torch.nn.Linear(emb_size, emb_size),
+                                                  torch.nn.LeakyReLU(),
+                                                  torch.nn.Linear(emb_size, n_classes),
+                                                  torch.nn.Sigmoid()
+                                                  )
+
+        self.attention = attention
+        if attention:
+            self.attention_nn = torch.nn.MultiheadAttention(emb_size, 1, batch_first=True)
+
+    def forward(self, x, c, return_attn=False, weight_attn=None):
+
+        if self.attention:
+            x, _ = self.attention_nn(x, x, x)
+
+        if weight_attn is None:
+
+            weight_attn = self.pos_weight_nn(x) - self.neg_weight_nn(x)
+
+            # weight_attn = self.weight_nn(x).reshape(-1, c.shape[1], self.n_classes, 3)
+            # p, n, z = weight_attn[:, :, :, 0], weight_attn[:, :, :, 1], weight_attn[:, :, :, 2]
+            # weight_attn = (p - n) * (1-z)
+
+        logits = (c.unsqueeze(-1) * weight_attn).sum(dim=1).float()
+        if self.bias:
+            bias_attn = self.pos_bias_nn(x.mean(dim=1)) - self.neg_bias_nn(x.mean(dim=1))
+
+            logits += bias_attn
+            # weight_attn = torch.cat([weight_attn, bias_attn.unsqueeze(1)], dim=1)
+        preds = torch.sigmoid(logits)
+        if return_attn:
+            if self.bias:
+                return preds, weight_attn, bias_attn
+            return preds, weight_attn
+        else:
+            return preds
+
+    def explain(self, x, c, mode, concept_names=None, class_names=None, weight_attn=None):
+        assert mode in ['local', 'global', 'exact']
+
+        if concept_names is None:
+            concept_names = [f'c_{i}' for i in range(c.shape[1])]
+        if class_names is None:
+            class_names = [f'y_{i}' for i in range(self.n_classes)]
+
+        # make a forward pass to get predictions and attention weights
+        if self.bias:
+            y_preds, weight_attn_mask, _ = self.forward(x, c, return_attn=True, weight_attn=weight_attn)
+        else:
+            y_preds, weight_attn_mask = self.forward(x, c, return_attn=True, weight_attn=weight_attn)
+
+        explanations = []
+        all_class_explanations = {cn: [] for cn in class_names}
+        for sample_idx in range(len(x)):
+            prediction = y_preds[sample_idx] > 0.5
+            active_classes = torch.argwhere(prediction).ravel()
+
+            if len(active_classes) == 0:
+                # if no class is active for this sample, then we cannot extract any explanation
+                explanations.append({
+                    'class': -1,
+                    'explanation': '',
+                    'attention': [],
+                })
+            else:
+                # else we can extract an explanation for each active class!
+                for target_class in active_classes:
+                    attentions = []
+                    minterm = []
+                    for concept_idx in range(len(concept_names)):
+                        c_pred = c[sample_idx, concept_idx]
+                        weight_attn = weight_attn_mask[sample_idx, concept_idx, target_class]
+
+                        # we first check if the concept was relevant
+                        # a concept is relevant <-> the absolute value of the weight attention score is higher than 0.5 and the concept is active
+                        if torch.abs(c_pred) > 0.5:
+                            if weight_attn > 0:
+                                minterm.append(f'+{weight_attn:.1f} {concept_names[concept_idx]}')
+                            else:
+                                minterm.append(f'{weight_attn:.1f} {concept_names[concept_idx]}')
+                        # minterm.append(f'({concept_names[concept_idx]})')
+                        attentions.append(weight_attn.item())
+
+                    # then we add the bias value (last value of the attention weights)
+                    # if self.bias:
+                    #     bias_attn = weight_attn_mask[sample_idx, -1, target_class]
+                    #     if bias_attn > 0:
+                    #         minterm.append(f'+{bias_attn:.1f} bias')
+                    #     else:
+                    #         minterm.append(f'{bias_attn:.1f} bias')
+                    #     attentions.append(bias_attn.item())
+
+                    # add explanation to list
+                    target_class_name = class_names[target_class]
+                    minterm = ' '.join(minterm)
+                    all_class_explanations[target_class_name].append(minterm)
+                    explanations.append({
+                        'sample-id': sample_idx,
+                        'class': target_class_name,
+                        'explanation': minterm,
+                        'attention': attentions,
+                    })
+
+        if mode == 'global':
+            # count most frequent explanations for each class
+            explanations = []
+            for class_id, class_explanations in all_class_explanations.items():
+                explanation_count = Counter(class_explanations)
+                for explanation, count in explanation_count.most_common():
+                    if count > 1:
+                        explanations.append({
+                            'class': class_id,
+                            'explanation': explanation,
+                            'count': count,
+                        })
+
+        return explanations
+
+    @staticmethod
+    def entropy_reg(t: torch.Tensor):
+        abs_t = torch.abs(t) + 1e-10
+        entropy = abs_t * torch.log(abs_t)
+        entropy_sum = - torch.sum(entropy, dim=1)
+        if entropy_sum.isnan().any():
+            print(t)
+            raise ValueError
+        return entropy_sum.mean()
+
+
 class ConceptReasoningLayer(torch.nn.Module):
     def __init__(self, emb_size, n_classes, logic: Logic = GodelTNorm(), temperature: float = 100.):
         super().__init__()
