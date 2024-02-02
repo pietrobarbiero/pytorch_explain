@@ -74,7 +74,8 @@ class ConceptLinearLayer(torch.nn.Module):
 
             logits += bias_attn
             # weight_attn = torch.cat([weight_attn, bias_attn.unsqueeze(1)], dim=1)
-        preds = torch.sigmoid(logits)
+        # preds = torch.sigmoid(logits)
+        preds = logits
         if return_attn:
             if self.bias:
                 return preds, weight_attn, bias_attn
@@ -122,9 +123,9 @@ class ConceptLinearLayer(torch.nn.Module):
                         # a concept is relevant <-> the absolute value of the weight attention score is higher than 0.5 and the concept is active
                         if torch.abs(c_pred) > 0.5:
                             if weight_attn > 0:
-                                minterm.append(f'+{weight_attn:.1f} {concept_names[concept_idx]}')
+                                minterm.append(f'+{weight_attn:.0f} {concept_names[concept_idx]}')
                             else:
-                                minterm.append(f'{weight_attn:.1f} {concept_names[concept_idx]}')
+                                minterm.append(f'{weight_attn:.0f} {concept_names[concept_idx]}')
                         # minterm.append(f'({concept_names[concept_idx]})')
                         attentions.append(weight_attn.item())
 

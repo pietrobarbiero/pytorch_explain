@@ -10,7 +10,7 @@ from sklearn.preprocessing import MinMaxScaler, KBinsDiscretizer
 from sklearn.tree import DecisionTreeClassifier
 from torch.nn.functional import one_hot
 from torch.utils.data import TensorDataset
-
+from tqdm import tqdm
 
 
 def load_mimic(base_dir: str = './data/'):
@@ -302,7 +302,11 @@ def load_mnist_addition(base_dir='./data'):
     class MNISTAdditionDataset(torch.utils.data.Dataset):
         def __init__(self,  dataset):
             self.dataset = dataset
-            self.transform = transforms.Compose([transforms.ToTensor()])
+            # MNIST transforms
+            self.transform = transforms.Compose([
+                transforms.ToTensor(),
+                transforms.Normalize((0.1307,), (0.3081,))
+            ])
             self.index_dataset2 = np.random.randint(0, len(self.dataset), len(self.dataset))
 
         def __len__(self):
@@ -315,47 +319,70 @@ def load_mnist_addition(base_dir='./data'):
             image2, label2 = self.dataset[self.index_dataset2[idx]]
             image2 = self.transform(image2)
 
+            image = torch.cat((image, image2), dim=-1)
+
             c_label = torch.zeros(20)
             c_label[label] = 1
-            c_label[label2] = 1
+            c_label[label2+10] = 1
 
             y_label = label + label2
 
-            return image, image2, c_label, y_label
+
+            return image, c_label, y_label
 
     train_mnist_addition_dataset = MNISTAdditionDataset(dataset)
     test_mnist_addition_dataset = MNISTAdditionDataset(test_dataset)
 
     return train_mnist_addition_dataset, test_mnist_addition_dataset
 
-def extract_image_features(dataset, filename='data/data.pt'):
+
+def extract_image_features(dataset, model_name, filename='data/data.pt', batch_size=100, load=True):
     '''Function to extract the features from the image dataset. It extracts the features from the images using a
     pre-trained ResNet18 model. The features are then saved in a file. If the file already exists, it loads the
     features from the file.
     '''
     import torchvision
 
-    if os.path.exists(filename):
-        data = torch.load(filename)
-        return data
+    if os.path.exists(filename) and load:
+        data, concepts, labels = torch.load(filename)
+        return data, concepts, labels
 
-    # Load the ResNet18 model
-    model = torchvision.models.resnet18(pretrained=True)
-    model.fc = torch.nn.Identity()
-    model.eval()
+    # extract_features
+    if model_name == "resnet18":
+        model = torchvision.models.resnet18(pretrained=True)
+        model.fc = torch.nn.Identity()
+    else:
+        model = torch.nn.Flatten()
+
+    if model_name == "resnet18":
+        # Transform the image from 28x28x1 to 28x28x3 and normalize with Imagenet statistics
+        dataset.transform = torchvision.transforms.Compose([
+            # torchvision.transforms.Resize((224, 224)),
+            torchvision.transforms.ToTensor(),
+            torchvision.transforms.Lambda(lambda x: x.repeat(3, 1, 1)),
+            torchvision.transforms.Normalize(
+                mean=[0.485, 0.456, 0.406],
+                std=[0.229, 0.244, 0.225]
+            ),
+        ])
 
     # Extract the features from the images
-    data = []
-    dataloader = torch.utils.data.DataLoader(dataset, batch_size=100, shuffle=False)
-    for x, y in dataloader:
-        with torch.no_grad():
+    data, concepts, labels = [], [], []
+    dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=False)
+    model.eval()
+    with torch.no_grad():
+        for x, c, y in tqdm(dataloader, desc="Extracting features", total=len(dataloader)):
             features = model(x)
-        data.append((features, y))
+            data.append(features), concepts.append(c), labels.append(y)
+
+    data = torch.cat(data, dim=0)
+    concepts = torch.cat(concepts, dim=0)
+    labels = torch.cat(labels, dim=0)
 
     # Save the features in a file
-    torch.save(data, filename)
-    return data
+    torch.save((data, concepts, labels), filename)
 
+    return torch.as_tensor(data), concepts, labels
 
 
 def load_tabula_muris(base_dir='./data', batch_size=30, mode='train'):
