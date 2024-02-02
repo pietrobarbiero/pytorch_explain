@@ -155,7 +155,7 @@ class ConceptLinearLayer(torch.nn.Module):
             for class_id, class_explanations in all_class_explanations.items():
                 explanation_count = Counter(class_explanations)
                 for explanation, count in explanation_count.most_common():
-                    if count > 1:
+                    if count > 5:
                         explanations.append({
                             'class': class_id,
                             'explanation': explanation,

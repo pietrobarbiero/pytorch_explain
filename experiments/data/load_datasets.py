@@ -300,6 +300,7 @@ def load_mnist_addition(base_dir='./data'):
 
     # Define class dataset for the MNIST addition dataset
     class MNISTAdditionDataset(torch.utils.data.Dataset):
+        stack = False
         def __init__(self,  dataset):
             self.dataset = dataset
             # MNIST transforms
@@ -319,14 +320,16 @@ def load_mnist_addition(base_dir='./data'):
             image2, label2 = self.dataset[self.index_dataset2[idx]]
             image2 = self.transform(image2)
 
-            image = torch.cat((image, image2), dim=-1)
+            if self.stack:
+                image = torch.stack((image, image2), dim=0)
+            else:
+                image = torch.cat((image, image2), dim=-1)
 
             c_label = torch.zeros(20)
             c_label[label] = 1
             c_label[label2+10] = 1
 
             y_label = label + label2
-
 
             return image, c_label, y_label
 
@@ -343,13 +346,15 @@ def extract_image_features(dataset, model_name, filename='data/data.pt', batch_s
     '''
     import torchvision
 
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
     if os.path.exists(filename) and load:
         data, concepts, labels = torch.load(filename)
         return data, concepts, labels
 
     # extract_features
     if model_name == "resnet18":
-        model = torchvision.models.resnet18(pretrained=True)
+        model = torchvision.models.resnet18(weights=torchvision.models.ResNet18_Weights.IMAGENET1K_V1)
         model.fc = torch.nn.Identity()
     else:
         model = torch.nn.Flatten()
@@ -357,7 +362,7 @@ def extract_image_features(dataset, model_name, filename='data/data.pt', batch_s
     if model_name == "resnet18":
         # Transform the image from 28x28x1 to 28x28x3 and normalize with Imagenet statistics
         dataset.transform = torchvision.transforms.Compose([
-            # torchvision.transforms.Resize((224, 224)),
+            torchvision.transforms.Resize((224, 224)),
             torchvision.transforms.ToTensor(),
             torchvision.transforms.Lambda(lambda x: x.repeat(3, 1, 1)),
             torchvision.transforms.Normalize(
@@ -365,14 +370,21 @@ def extract_image_features(dataset, model_name, filename='data/data.pt', batch_s
                 std=[0.229, 0.244, 0.225]
             ),
         ])
+        dataset.stack = True
 
     # Extract the features from the images
     data, concepts, labels = [], [], []
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=False)
     model.eval()
+    model.to(device)
     with torch.no_grad():
         for x, c, y in tqdm(dataloader, desc="Extracting features", total=len(dataloader)):
-            features = model(x)
+            x = x.to(device)
+            if dataset.stack:
+                x = x.reshape(-1, x.shape[-3], x.shape[-2], x.shape[-1])
+            features = model(x).cpu()
+            if dataset.stack:
+                features = features.reshape(c.shape[0], -1)
             data.append(features), concepts.append(c), labels.append(y)
 
     data = torch.cat(data, dim=0)
