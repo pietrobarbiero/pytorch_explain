@@ -25,9 +25,9 @@ def train_concept_bottleneck_model(train_dataset, test_dataset, extracting_model
                                    encoder_size=128, concept_names=None, epochs=1000, lr=0.001,
                                    weight_task=0.1, weight_reg=1e-5, bias_reg=1e-2, bias=False, load=True):
 
-    x_train, c_train, y_train = extract_image_features(train_dataset, extracting_model, load=load,
+    x_train, c_train, y_train = extract_image_features(train_dataset, extracting_model, load=load, mnist=True,
                                                        filename=f'data/mnist_addition_{extracting_model}_train.pt')
-    x_test, c_test, y_test = extract_image_features(test_dataset, extracting_model, load=load,
+    x_test, c_test, y_test = extract_image_features(test_dataset, extracting_model, load=load, mnist=True,
                                                     filename=f'data/mnist_addition_{extracting_model}_test.pt')
 
     x_train, c_train, y_train = x_train.to(device), c_train.to(device), y_train.to(device)

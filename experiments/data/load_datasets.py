@@ -273,6 +273,7 @@ def load_cub(base_dir='./data'):
             test_data = TensorDataset(x_test, y_test)
             return train_data, val_data, test_data, concept_names
 
+
 def load_mnist_addition(base_dir='./data'):
     from torchvision import datasets
     from torchvision import transforms
@@ -339,62 +340,121 @@ def load_mnist_addition(base_dir='./data'):
     return train_mnist_addition_dataset, test_mnist_addition_dataset
 
 
-def extract_image_features(dataset, model_name, filename='data/data.pt', batch_size=100, load=True):
-    '''Function to extract the features from the image dataset. It extracts the features from the images using a
-    pre-trained ResNet18 model. The features are then saved in a file. If the file already exists, it loads the
-    features from the file.
-    '''
-    import torchvision
+def load_cub_v2(base="data", force=False, data_augmentation=True):
+    from experiments.data.utils import download_cub
+    from torchvision import transforms
+    from torchvision.datasets import ImageFolder
+    import json
 
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
-    if os.path.exists(filename) and load:
-        data, concepts, labels = torch.load(filename)
-        return data, concepts, labels
-
-    # extract_features
-    if model_name == "resnet18":
-        model = torchvision.models.resnet18(weights=torchvision.models.ResNet18_Weights.IMAGENET1K_V1)
-        model.fc = torch.nn.Identity()
+    if not os.path.isdir(os.path.join(base, "CUB_200_2011")) or force:
+        download_cub(base)
     else:
-        model = torch.nn.Flatten()
+        print("Dataset already downloaded and configured")
 
-    if model_name == "resnet18":
-        # Transform the image from 28x28x1 to 28x28x3 and normalize with Imagenet statistics
-        dataset.transform = torchvision.transforms.Compose([
-            torchvision.transforms.Resize((224, 224)),
-            torchvision.transforms.ToTensor(),
-            torchvision.transforms.Lambda(lambda x: x.repeat(3, 1, 1)),
-            torchvision.transforms.Normalize(
-                mean=[0.485, 0.456, 0.406],
-                std=[0.229, 0.244, 0.225]
-            ),
-        ])
-        dataset.stack = True
+    class CUB2002011(ImageFolder):
+        def __init__(self, root, transform):
+            super().__init__(root, transform=transform)
+            self.attributes = torch.as_tensor(np.load(os.path.join(root, "attributes.npy")), dtype=torch.float32)
+            with open(os.path.join(root, "attributes_names.txt"), "r") as f:
+                self.attribute_names = json.load(f)
 
-    # Extract the features from the images
-    data, concepts, labels = [], [], []
-    dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=False)
-    model.eval()
-    model.to(device)
-    with torch.no_grad():
-        for x, c, y in tqdm(dataloader, desc="Extracting features", total=len(dataloader)):
-            x = x.to(device)
-            if dataset.stack:
-                x = x.reshape(-1, x.shape[-3], x.shape[-2], x.shape[-1])
-            features = model(x).cpu()
-            if dataset.stack:
-                features = features.reshape(c.shape[0], -1)
-            data.append(features), concepts.append(c), labels.append(y)
+        def __getitem__(self, index):
+            img, label = super().__getitem__(index)
+            return img, self.attributes[index], label
 
-    data = torch.cat(data, dim=0)
-    concepts = torch.cat(concepts, dim=0)
-    labels = torch.cat(labels, dim=0)
+    size = 224
+    resize = int(size * 0.9)
+    test_transform = transforms.Compose([
+        transforms.Resize(resize),
+        transforms.CenterCrop(size),
+        transforms.ToTensor(),
+        transforms.Normalize(
+            mean=[0.485, 0.456, 0.406],
+            std=[0.229, 0.244, 0.225]
+        ),
+    ])
+    train_transform = transforms.Compose([
+        transforms.Resize(size=resize),
+        transforms.CenterCrop(size=size),
+        transforms.ColorJitter(brightness=0.3, contrast=0.3, hue=0.3, saturation=0.3),
+        transforms.RandomRotation(0.3),
+        transforms.RandomHorizontalFlip(),
+        transforms.RandomVerticalFlip(),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    ])
 
-    # Save the features in a file
-    torch.save((data, concepts, labels), filename)
+    dataset = CUB2002011(os.path.join(base, 'CUB_200_2011'), transform=test_transform)
 
-    return torch.as_tensor(data), concepts, labels
+    train_dataset, test_dataset = torch.utils.data.random_split(dataset, [len(dataset)//10*9,
+                                                                          len(dataset) - len(dataset)//10*9])
+
+    if data_augmentation:
+        from copy import copy
+        train_dataset.dataset = copy(train_dataset.dataset)
+        train_dataset.dataset.transform = train_transform
+    return train_dataset, test_dataset
+
+
+def load_celeba(base_dir='./data', data_augmentation=False, simplified=False):
+    from torchvision import datasets
+    from torchvision import transforms
+    '''Function to load the CelebA dataset. It is a dataset for concept-based classification. It employs
+    the CelebA dataset as input and the task is to predict a set of attributes of the images. The concepts are 
+    represented by the first 10% of attributes of the images and the task are represented by the second 10% of attributes.
+    '''
+
+    class CelebADataset(torch.utils.data.Dataset):
+        def __init__(self,  dataset, data_augmentation=False, simplified=False):
+            self.dataset = dataset
+            self.simple = simplified
+            size = 224
+            resize = size #  int(size * 0.9)
+            if data_augmentation:
+                self.transform = transforms.Compose([
+                    transforms.Resize(size=resize),
+                    transforms.CenterCrop(size=size),
+                    transforms.ColorJitter(brightness=0.3, contrast=0.3, hue=0.3, saturation=0.3),
+                    transforms.RandomRotation(0.3),
+                    transforms.RandomHorizontalFlip(),
+                    transforms.RandomVerticalFlip(),
+                    transforms.ToTensor(),
+                    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+                ])
+            else:
+                self.transform = transforms.Compose([
+                    transforms.Resize(resize),
+                    transforms.CenterCrop(size),
+                    transforms.ToTensor(),
+                    transforms.Normalize(
+                        mean=[0.485, 0.456, 0.406],
+                        std=[0.229, 0.244, 0.225]
+                    ),
+                ])
+
+        def __len__(self):
+            return len(self.dataset)
+
+        def __getitem__(self, idx):
+            image, label = self.dataset[idx]
+            image = self.transform(image)
+
+            # if simplified:
+            #     c_label = label[20:21]
+            #     y_label = ~label[20:21]
+            # else:
+            c_label = label[:20]
+            y_label = label[20:]
+
+            return image, c_label, y_label
+
+    train_dataset = datasets.CelebA(root=base_dir, download=True, split='train')
+    celeba_train_dataset = CelebADataset(train_dataset, data_augmentation=data_augmentation, simplified=simplified)
+
+    test_dataset = datasets.CelebA(root=base_dir, download=True, split='test')
+    celeba_test_dataset = CelebADataset(test_dataset, data_augmentation=False, simplified=simplified)
+
+    return celeba_train_dataset, celeba_test_dataset
 
 
 def load_tabula_muris(base_dir='./data', batch_size=30, mode='train'):
